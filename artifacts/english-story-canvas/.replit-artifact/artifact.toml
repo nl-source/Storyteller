@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "英语故事画布"
+description = "A browser-based p5.js-inspired English learning canvas for children: spoken words become animated characters, actions, and a growing story in real time."
+version = "1.0.0"
+id = "artifacts/english-story-canvas"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21386
+
+[services.development]
+run = "pnpm --filter @workspace/english-story-canvas run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/english-story-canvas", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/english-story-canvas/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21386"
+BASE_PATH = "/"

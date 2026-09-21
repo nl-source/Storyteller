@@ -1,0 +1,265 @@
+let speech;
+let hasApple = false;
+let hasBee = false;
+let appleFlying = false;
+let beeFlying = false;
+let beeEating = false;
+let appleEating = false;
+let appleChasing = false;
+
+// 位置与动画变量
+let appleX = 250;
+let appleY = 200;
+let beeX = 400;
+let beeY = 200;
+
+let flowerSize = 0;
+
+function setup() {
+  createCanvas(600, 400);
+  textAlign(CENTER, CENTER);
+  
+  // 初始化语音识别
+  let SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  
+  if (SpeechRecognition) {
+    speech = new SpeechRecognition();
+    speech.continuous = true;
+    speech.interimResults = false;
+    speech.lang = 'en-US';
+    
+    speech.onresult = parseSpeech;
+    
+    speech.onend = () => { speech.start(); };
+    speech.start();
+  } else {
+    console.log("当前浏览器不支持语音识别，请使用 Chrome 浏览器。");
+  }
+}
+
+function draw() {
+  background(240, 248, 255);
+  
+  fill(80);
+  textSize(15);
+  text("说话试试：'apple', 'bee', 'apple fly', 'bee fly', 'bee eat', 'apple eat', 'apple eat bee'", width / 2, 25);
+  
+  if (hasApple) {
+    drawApple();
+  }
+  
+  if (hasBee) {
+    drawBee();
+  }
+}
+
+// 解析语音结果
+function parseSpeech(event) {
+  let lastResultIndex = event.results.length - 1;
+  let text = event.results[lastResultIndex][0].transcript.toLowerCase().trim();
+  console.log("听到指令:", text);
+
+  // 1. 容错处理：将容易误判的字母 "b" 或 "be" 统一替换为 "bee"
+  text = text.replace(/\bb\b/g, "bee").replace(/\bbe\b/g, "bee");
+
+  // 2. 指令匹配
+  if (text.includes("apple") && text.includes("eat") && text.includes("bee")) {
+    hasApple = true;
+    hasBee = true;
+    appleEating = true;
+    appleChasing = true; // 触发追赶模式
+  } else if (text.includes("apple") && text.includes("fly")) {
+    hasApple = true;
+    appleFlying = true;
+  } else if (text.includes("apple") && text.includes("eat")) {
+    hasApple = true;
+    appleEating = true;
+  } else if (text.includes("bee") && text.includes("fly")) {
+    hasBee = true;
+    beeFlying = true;
+  } else if (text.includes("bee") && text.includes("eat")) {
+    hasBee = true;
+    beeEating = true;
+  } else {
+    if (text.includes("apple")) hasApple = true;
+    if (text.includes("bee")) hasBee = true;
+  }
+}
+
+// 绘制精细可爱的苹果
+function drawApple() {
+  push();
+  let currentX = appleX;
+  let currentY = appleY;
+  
+  // 1. 如果触发了 "apple eat bee"，苹果追着蜜蜂移动
+  if (appleChasing && hasBee) {
+    appleX = lerp(appleX, beeX - 45, 0.03);
+    appleY = lerp(appleY, beeY, 0.03);
+    currentX = appleX;
+    currentY = appleY;
+  } else if (appleFlying) {
+    // 飞行效果
+    currentY = appleY + sin(frameCount * 0.05) * 20;
+    
+    // 精致翅膀
+    fill(255, 200);
+    stroke(0);
+    strokeWeight(2);
+    let wingAngle = sin(frameCount * 0.2) * 0.3;
+    
+    push();
+    translate(currentX - 25, currentY - 10);
+    rotate(-wingAngle - 0.2);
+    ellipse(-15, 0, 32, 18);
+    pop();
+    
+    push();
+    translate(currentX + 25, currentY - 10);
+    rotate(wingAngle + 0.2);
+    ellipse(15, 0, 32, 18);
+    pop();
+  }
+  
+  // 2. 苹果主轮廓（手绘质感贝塞尔曲线）
+  stroke(40);
+  strokeWeight(3.5);
+  fill(255);
+  
+  beginShape();
+    vertex(currentX, currentY - 18);
+    bezierVertex(currentX + 22, currentY - 32, currentX + 45, currentY - 10, currentX + 42, currentY + 15);
+    bezierVertex(currentX + 40, currentY + 38, currentX + 12, currentY + 45, currentX, currentY + 40);
+    bezierVertex(currentX - 12, currentY + 45, currentX - 40, currentY + 38, currentX - 42, currentY + 15);
+    bezierVertex(currentX - 45, currentY - 10, currentX - 22, currentY - 32, currentX, currentY - 18);
+  endShape(CLOSE);
+  
+  // 3. 顶部与底部弧线（强化轮廓）
+  noFill();
+  strokeWeight(2);
+  stroke(60);
+  arc(currentX, currentY - 18, 16, 10, 0.1, PI - 0.1);
+  arc(currentX, currentY + 38, 14, 8, PI + 0.2, TWO_PI - 0.2);
+  
+  // 4. 精致高光弧线
+  strokeWeight(2.5);
+  stroke(100);
+  arc(currentX - 24, currentY - 5, 20, 30, PI * 0.7, PI * 1.15);
+  strokeWeight(1.5);
+  arc(currentX - 18, currentY + 10, 10, 15, PI * 0.7, PI * 1.1);
+  
+  // 5. 如果触发了 "apple eat"，长出吃东西的小嘴巴
+  if (appleEating) {
+    strokeWeight(2);
+    stroke(0);
+    fill(255, 180, 180);
+    let mouthOpen = abs(sin(frameCount * 0.2)) * 16;
+    
+    push();
+    translate(currentX + 8, currentY + 2);
+    arc(0, 0, 18, mouthOpen + 2, 0, TWO_PI);
+    pop();
+  }
+  
+  // 6. 弯曲果蒂
+  strokeWeight(3.5);
+  stroke(101, 67, 33);
+  noFill();
+  beginShape();
+    vertex(currentX, currentY - 18);
+    bezierVertex(currentX - 2, currentY - 28, currentX + 5, currentY - 35, currentX + 8, currentY - 40);
+  endShape();
+  
+  // 7. 带有脉络的极简叶子
+  push();
+  translate(currentX + 5, currentY - 35);
+  rotate(-PI / 6);
+  
+  fill(124, 205, 124);
+  stroke(40);
+  strokeWeight(2);
+  beginShape();
+    vertex(0, 0);
+    bezierVertex(10, -12, 25, -10, 28, 0);
+    bezierVertex(25, 10, 10, 12, 0, 0);
+  endShape(CLOSE);
+  
+  stroke(30, 90, 30);
+  strokeWeight(1.5);
+  line(0, 0, 24, 0);
+  line(8, 0, 14, -5);
+  line(8, 0, 14, 5);
+  pop();
+  
+  pop();
+}
+
+// 绘制可爱蜜蜂
+function drawBee() {
+  push();
+  let currentBeeX = beeX;
+  let currentBeeY = beeY;
+  let beeWingFlap = 0;
+  
+  if (beeFlying) {
+    beeY = 200 + sin(frameCount * 0.08) * 25;
+    beeX = 400 + cos(frameCount * 0.05) * 15;
+    currentBeeX = beeX;
+    currentBeeY = beeY;
+    beeWingFlap = sin(frameCount * 0.3) * 10;
+  }
+  
+  if (appleChasing) {
+    currentBeeX += sin(frameCount * 0.3) * 8;
+    currentBeeY += cos(frameCount * 0.3) * 5;
+    beeWingFlap = sin(frameCount * 0.5) * 12;
+  }
+  
+  if (beeEating) {
+    if (flowerSize < 1) flowerSize += 0.02;
+    
+    push();
+    translate(450, 250);
+    scale(flowerSize);
+    stroke(34, 139, 34);
+    strokeWeight(4);
+    line(0, 0, 0, 60);
+    
+    noStroke();
+    fill(255, 182, 193);
+    for (let a = 0; a < TWO_PI; a += PI / 3) {
+      ellipse(cos(a) * 20, sin(a) * 20, 20, 20);
+    }
+    fill(255, 215, 0);
+    ellipse(0, 0, 25, 25);
+    pop();
+    
+    currentBeeX = 430 + sin(frameCount * 0.1) * 5;
+    currentBeeY = 220 + cos(frameCount * 0.1) * 5;
+  }
+  
+  translate(currentBeeX, currentBeeY);
+  
+  // 翅膀
+  fill(220, 240, 255, 200);
+  stroke(0);
+  strokeWeight(2);
+  ellipse(-5 - beeWingFlap, -20, 18, 25);
+  ellipse(10 + beeWingFlap, -20, 18, 25);
+  
+  // 身体
+  fill(255, 215, 0);
+  ellipse(0, 0, 50, 40);
+  fill(0);
+  rect(-5, -19, 8, 38, 3);
+  rect(10, -17, 8, 34, 3);
+  
+  // 眼睛与笑容
+  fill(0);
+  ellipse(-15, -3, 5, 5);
+  noFill();
+  stroke(0);
+  arc(-18, 3, 10, 8, 0, HALF_PI);
+  
+  pop();
+}
