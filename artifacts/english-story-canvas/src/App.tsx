@@ -31,6 +31,7 @@ import {
 const queryClient = new QueryClient();
 
 type Word = 'apple' | 'bee' | 'eat' | 'fly';
+type SpeechResultLike = ArrayLike<{ transcript: string }> & { isFinal?: boolean };
 type SpeechLike = {
   continuous: boolean;
   interimResults: boolean;
@@ -38,7 +39,7 @@ type SpeechLike = {
   onstart: (() => void) | null;
   onend: (() => void) | null;
   onerror: ((event: { error?: string }) => void) | null;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string; isFinal?: boolean }>> }) => void) | null;
+  onresult: ((event: { results: ArrayLike<SpeechResultLike> }) => void) | null;
   start: () => void;
   stop: () => void;
 };
@@ -53,7 +54,7 @@ const vocabulary: Array<{ word: Word; hint: string; color: string }> = [
 
 const wordAliases: Record<Word, string[]> = {
   apple: ['apple', 'apples'],
-  bee: ['bee', 'bees', 'b'],
+  bee: ['bee', 'bees', 'be', 'b'],
   eat: ['eat', 'eats', 'eating', 'ate'],
   fly: ['fly', 'flies', 'flying'],
 };
@@ -261,7 +262,7 @@ function Home() {
       const transcript = Array.from({ length: event.results.length }, (_, index) => event.results[index][0].transcript).join(' ');
       setHeard(transcript);
       const lastResult = event.results[event.results.length - 1];
-      if (!lastResult?.[0]?.isFinal) return;
+      if (!lastResult?.isFinal) return;
       const spokenWords = findWords(transcript);
       if (spokenWords.length) addWords(spokenWords, transcript);
       else setStatus('I heard you, but try one of the four silly story words.');
