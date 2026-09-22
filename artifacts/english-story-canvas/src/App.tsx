@@ -94,6 +94,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
       let previousSequence = '';
       let appleRevealFrame = -1;
       let actionStartFrame = -1;
+      let referenceArtwork: p5.Image;
       const getWords = () => activeRef.current;
       const has = (word: Word) => getWords().includes(word);
       const hasInOrder = (sequence: Word[]) => {
@@ -105,6 +106,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         return false;
       };
       canvas.setup = () => {
+        referenceArtwork = canvas.loadImage('/yan-tree-apple.jpg');
         const box = holderRef.current?.getBoundingClientRect();
         w = Math.max(280, Math.floor(box?.width ?? 620));
         h = Math.max(300, Math.min(460, Math.floor(w * 0.63)));
@@ -198,22 +200,15 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             : appleFlying
               ? h * 0.38 + Math.cos(canvas.frameCount * 0.08) * 38
               : appleHomeY;
-        // soft sun and hand-drawn clouds
-        canvas.fill('#ffcf52'); canvas.circle(w * .84, h * .16, 72);
-        canvas.fill('#fff9e9');
-        canvas.ellipse(w * .18, h * .18, 122, 36);
-        canvas.ellipse(w * .27, h * .14, 92, 32);
-        // distant hills
-        canvas.fill('#9bd4c2');
-        canvas.arc(w * .25, h * .72, w * .72, h * .7, canvas.PI, canvas.TWO_PI);
-        canvas.fill('#76bdad');
-        canvas.arc(w * .75, h * .78, w * .9, h * .72, canvas.PI, canvas.TWO_PI);
-        // ground
-        canvas.fill('#f6ce7a'); canvas.rect(0, h * .76, w, h * .24);
-        // apple tree, with the apple hidden until the child says "apple"
-        canvas.fill('#9a654a'); canvas.rect(w * .68, h * .53, 18, h * .3, 8);
-        canvas.fill('#318e82'); canvas.ellipse(w * .68, h * .5, 150, 118);
-        canvas.fill('#439f86'); canvas.ellipse(w * .78, h * .47, 108, 95);
+        // Yan's artwork supplies the warm paper, leafy tree, and hand-painted apples.
+        canvas.background('#fff8a5');
+        if (referenceArtwork?.width) {
+          const scale = Math.max(w / referenceArtwork.width, h / referenceArtwork.height);
+          const imageWidth = referenceArtwork.width * scale;
+          const imageHeight = referenceArtwork.height * scale;
+          canvas.image(referenceArtwork, (w - imageWidth) / 2, (h - imageHeight) / 2, imageWidth, imageHeight);
+        }
+        // The reference painting already contains the tree and apples. This overlay keeps the spoken apple animation.
         if (has('apple')) {
           canvas.push();
           canvas.translate(appleX, appleY);
