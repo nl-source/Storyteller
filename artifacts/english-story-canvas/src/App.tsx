@@ -198,22 +198,53 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             : appleFlying
               ? h * 0.38 + Math.cos(canvas.frameCount * 0.08) * 38
               : appleHomeY;
-        // soft sun and hand-drawn clouds
-        canvas.fill('#ffcf52'); canvas.circle(w * .84, h * .16, 72);
-        canvas.fill('#fff9e9');
-        canvas.ellipse(w * .18, h * .18, 122, 36);
-        canvas.ellipse(w * .27, h * .14, 92, 32);
-        // distant hills
-        canvas.fill('#9bd4c2');
-        canvas.arc(w * .25, h * .72, w * .72, h * .7, canvas.PI, canvas.TWO_PI);
-        canvas.fill('#76bdad');
-        canvas.arc(w * .75, h * .78, w * .9, h * .72, canvas.PI, canvas.TWO_PI);
-        // ground
-        canvas.fill('#f6ce7a'); canvas.rect(0, h * .76, w, h * .24);
-        // apple tree, with the apple hidden until the child says "apple"
-        canvas.fill('#9a654a'); canvas.rect(w * .68, h * .53, 18, h * .3, 8);
-        canvas.fill('#318e82'); canvas.ellipse(w * .68, h * .5, 150, 118);
-        canvas.fill('#439f86'); canvas.ellipse(w * .78, h * .47, 108, 95);
+        // Bright hand-painted scene inspired by the reference palette.
+        canvas.background('#fff28b');
+        canvas.fill('#ffec78');
+        canvas.ellipse(w * .22, h * .18, 180, 54);
+        canvas.ellipse(w * .51, h * .08, 220, 42);
+        canvas.ellipse(w * .82, h * .24, 170, 52);
+        canvas.fill('#f3d66c');
+        canvas.rect(0, h * .8, w, h * .2);
+        // Small paper-cut leaves and a flower keep the scene playful without hiding the tree.
+        canvas.fill('#2b9e62');
+        canvas.ellipse(w * .15, h * .26, 42, 15);
+        canvas.ellipse(w * .19, h * .3, 28, 12);
+        canvas.ellipse(w * .47, h * .19, 36, 13);
+        canvas.fill('#ed6b45');
+        canvas.circle(w * .48, h * .3, 9);
+        canvas.fill('#f6a948');
+        canvas.circle(w * .48, h * .3, 4);
+        canvas.fill('#2b9e62');
+        canvas.stroke('#2b9e62'); canvas.strokeWeight(4);
+        canvas.line(w * .48, h * .32, w * .46, h * .39);
+        canvas.line(w * .46, h * .39, w * .42, h * .37);
+        canvas.line(w * .46, h * .39, w * .5, h * .36);
+        canvas.noStroke();
+        // The complete tree stays in the scene, with an organic green crown and warm orange trunk.
+        canvas.fill('#e99a3f');
+        canvas.beginShape();
+        canvas.vertex(w * .65, h * .82);
+        canvas.vertex(w * .69, h * .82);
+        canvas.vertex(w * .71, h * .52);
+        canvas.vertex(w * .75, h * .47);
+        canvas.vertex(w * .71, h * .44);
+        canvas.vertex(w * .67, h * .5);
+        canvas.vertex(w * .67, h * .82);
+        canvas.endShape(canvas.CLOSE);
+        canvas.fill('#edaa4a');
+        canvas.ellipse(w * .67, h * .82, 75, 15);
+        canvas.fill('#249d62');
+        canvas.ellipse(w * .62, h * .43, 126, 104);
+        canvas.ellipse(w * .73, h * .36, 112, 112);
+        canvas.ellipse(w * .81, h * .45, 100, 92);
+        canvas.fill('#2bab68');
+        canvas.ellipse(w * .7, h * .29, 98, 86);
+        canvas.ellipse(w * .58, h * .49, 78, 70);
+        canvas.fill('#3ab66e');
+        canvas.ellipse(w * .78, h * .3, 62, 54);
+        canvas.ellipse(w * .67, h * .49, 58, 48);
+        // Apple is hidden until the child says "apple".
         if (has('apple')) {
           canvas.push();
           canvas.translate(appleX, appleY);
@@ -222,10 +253,10 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             canvas.fill('#edf8f4'); canvas.ellipse(-22, -24, 30, 17); canvas.ellipse(22, -24, 30, 17);
             canvas.fill('#d4eee8'); canvas.ellipse(-22, -24, 16, 10); canvas.ellipse(22, -24, 16, 10);
           }
-          canvas.fill('#e96f5e'); canvas.circle(0, 0, 38);
-          canvas.fill('#7d4c39'); canvas.rect(-3, -24, 6, 12, 2);
-          canvas.fill('#7aba85'); canvas.ellipse(10, -26, 19, 9);
-          canvas.fill('#f4a9ba'); canvas.ellipse(-8, -5, 7, 12);
+          canvas.fill('#f26745'); canvas.circle(0, 0, 38);
+          canvas.fill('#dc8638'); canvas.rect(-3, -24, 6, 12, 2);
+          canvas.fill('#2b9e62'); canvas.ellipse(10, -26, 19, 9);
+          canvas.fill('#ff9a64'); canvas.ellipse(-8, -5, 7, 12);
           if (appleHasMouth && !appleEatBee) {
             const chomp = Math.abs(Math.sin(canvas.frameCount * 0.22)) * 14 + 5;
             canvas.fill('#382b38'); canvas.ellipse(12, 5, 20, 20 + chomp * 0.2);
