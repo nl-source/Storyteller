@@ -93,6 +93,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
       let h = 420;
       let previousSequence = '';
       let appleRevealFrame = -1;
+      let beeRevealFrame = -1;
       let actionStartFrame = -1;
       const getWords = () => activeRef.current;
       const has = (word: Word) => getWords().includes(word);
@@ -122,13 +123,16 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
       canvas.draw = () => {
         canvas.clear();
         canvas.noStroke();
-        canvas.background('#dff3f0');
         const sequence = getWords().join(' ');
         if (sequence !== previousSequence) {
           if (!previousSequence.includes('apple') && sequence.includes('apple')) {
             appleRevealFrame = canvas.frameCount;
           }
+          if (!previousSequence.includes('bee') && sequence.includes('bee')) {
+            beeRevealFrame = canvas.frameCount;
+          }
           if (!sequence.includes('apple')) appleRevealFrame = -1;
+          if (!sequence.includes('bee')) beeRevealFrame = -1;
           if (
             (!previousSequence.includes('bee eat apple') && sequence.includes('bee eat apple')) ||
             (!previousSequence.includes('apple eat bee') && sequence.includes('apple eat bee'))
@@ -146,17 +150,23 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         const beeHasMouth = hasInOrder(['bee', 'eat']);
         const appleFlies = hasInOrder(['apple', 'fly']);
         const beeFlies = hasInOrder(['bee', 'fly']);
-        const appleFlying = appleFlies && !appleEatBee;
-        const beeFlying = beeFlies && !appleEatBee;
+        const hasChaseAction = appleEatBee || beeEatApple;
+        const appleFlying = appleFlies && !hasChaseAction;
+        const beeFlying = beeFlies && !hasChaseAction;
+        const appleEating = appleHasMouth && !hasChaseAction;
+        const beeEating = beeHasMouth && !hasChaseAction;
         const appleHomeX = w * 0.68;
         const appleHomeY = h * 0.53;
         const appleGroundY = h * 0.76 - 22;
         const appleGroundX = w * 0.62;
         const appleFrames = Math.max(0, canvas.frameCount - (appleRevealFrame < 0 ? canvas.frameCount : appleRevealFrame));
+        const beeFrames = Math.max(0, canvas.frameCount - (beeRevealFrame < 0 ? canvas.frameCount : beeRevealFrame));
         const actionFrames = Math.max(0, canvas.frameCount - (actionStartFrame < 0 ? canvas.frameCount : actionStartFrame));
         const revealProgress = Math.min(1, appleFrames / 36);
         const revealEase = 1 - Math.pow(1 - revealProgress, 3);
         const appleScale = has('apple') ? 0.16 + revealEase * 0.84 : 0;
+        const beeRevealProgress = Math.min(1, beeFrames / 28);
+        const beeScale = has('bee') ? 0.35 + (1 - Math.pow(1 - beeRevealProgress, 3)) * 0.65 : 0;
         const appleEatBeeFall = appleEatBee ? Math.min(1, Math.max(0, (actionFrames - 42) / 34)) : 0;
         const appleEatBeeShake = appleEatBee && appleEatBeeFall < 1
           ? Math.sin(canvas.frameCount * 1.08) * 7 * (1 - appleEatBeeFall)
@@ -257,7 +267,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           canvas.fill('#dc8638'); canvas.rect(-3, -24, 6, 12, 2);
           canvas.fill('#2b9e62'); canvas.ellipse(10, -26, 19, 9);
           canvas.fill('#ff9a64'); canvas.ellipse(-8, -5, 7, 12);
-          if (appleHasMouth && !appleEatBee) {
+          if (appleEating) {
             const chomp = Math.abs(Math.sin(canvas.frameCount * 0.22)) * 14 + 5;
             canvas.fill('#382b38'); canvas.ellipse(12, 5, 20, 20 + chomp * 0.2);
             canvas.fill('#fff9e9');
@@ -277,6 +287,8 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           canvas.noFill(); canvas.stroke('#f2af2d'); canvas.strokeWeight(2); canvas.drawingContext.setLineDash([5, 6]);
           canvas.bezier(bx - 54, by + 12, bx - 24, by - 30, bx + 44, by + 38, bx + 58, by - 8);
           canvas.drawingContext.setLineDash([]); canvas.noStroke();
+          canvas.push();
+          canvas.drawingContext.globalAlpha = beeScale;
           canvas.fill('#f5c84b'); canvas.ellipse(bx, by, 48, 28);
           canvas.fill('#243b53'); canvas.rect(bx - 9, by - 14, 7, 28, 4); canvas.rect(bx + 7, by - 14, 7, 28, 4);
           const flap = Math.sin(canvas.frameCount * (beeFlying ? 0.5 : 0.3)) * 5;
@@ -288,17 +300,31 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             canvas.fill('#382b38'); canvas.ellipse(bx + 25, by + 6, 25, mouthOpen);
             canvas.fill('#f38e9b'); canvas.ellipse(bx + 30, by + 13, 13, 7);
             canvas.fill('#fff9e9'); canvas.ellipse(bx + 20, by - 2, 7, 6);
-          } else if (beeHasMouth) {
+          } else if (beeEating) {
             canvas.noFill(); canvas.stroke('#243b53'); canvas.strokeWeight(2);
             canvas.arc(bx + 21, by + 5, 10, 9, 0, canvas.PI);
             canvas.noStroke();
           }
+          canvas.pop();
         }
         // little story footprints / motion trails
         if (appleFlying || beeFlying || beeEatApple) {
           canvas.noFill(); canvas.stroke('#ee8c73'); canvas.strokeWeight(3);
           canvas.arc(w * .5, h * .29, 150, 80, canvas.PI + .2, canvas.TWO_PI - .2);
           canvas.noStroke();
+        }
+        if ((appleFlying || beeFlying) && !hasChaseAction) {
+          canvas.fill('#243b53');
+          canvas.textAlign(canvas.CENTER, canvas.CENTER);
+          canvas.textSize(12);
+          canvas.textStyle(canvas.BOLD);
+          canvas.text('WHOOSH!', w * 0.5, h * 0.72);
+        } else if ((appleEating || beeEating) && !hasChaseAction) {
+          canvas.fill('#243b53');
+          canvas.textAlign(canvas.CENTER, canvas.CENTER);
+          canvas.textSize(12);
+          canvas.textStyle(canvas.BOLD);
+          canvas.text('tiny chomp mode', w * 0.5, h * 0.72);
         }
         if (appleEatBee) {
           canvas.fill('#243b53'); canvas.textAlign(canvas.CENTER, canvas.CENTER); canvas.textSize(13); canvas.textStyle(canvas.BOLD);
@@ -507,7 +533,7 @@ function Home() {
               {vocabulary.map(({ word, hint, color }) => {
                 const found = words.includes(word);
                 return (
-                  <button key={word} onClick={() => addWord(word)} data-testid={`button-word-${word}`} className={`group relative min-h-[86px] rounded-[16px] border-2 p-3 text-left transition-transform hover:-translate-y-1 active:translate-y-0 ${found ? 'border-secondary bg-secondary/10' : 'border-border bg-background'}`}>
+                  <button key={word} onClick={() => addWord(word)} aria-pressed={found} data-testid={`button-word-${word}`} className={`group relative min-h-[86px] rounded-[16px] border-2 p-3 text-left transition-[transform,background-color,border-color] hover:-translate-y-1 active:translate-y-0 ${found ? 'border-secondary bg-secondary/10' : 'border-border bg-background'}`}>
                     <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${color === 'coral' ? 'bg-primary' : color === 'yellow' || color === 'sun' ? 'bg-accent' : color === 'teal' || color === 'mint' ? 'bg-secondary' : 'bg-[#b7a4da]'}`} />
                     <span className="block text-lg font-black tracking-[-.04em]">{word}</span>
                     <span className="mt-0.5 block text-[11px] font-semibold text-muted-foreground">{hint}</span>
