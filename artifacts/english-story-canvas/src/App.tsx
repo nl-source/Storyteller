@@ -232,10 +232,25 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             canvas.fill('#edf8f4'); canvas.ellipse(-22, -24, 30, 17); canvas.ellipse(22, -24, 30, 17);
             canvas.fill('#d4eee8'); canvas.ellipse(-22, -24, 16, 10); canvas.ellipse(22, -24, 16, 10);
           }
-          canvas.fill('#e96f5e'); canvas.circle(0, 0, 38);
-          canvas.fill('#7d4c39'); canvas.rect(-3, -24, 6, 12, 2);
-          canvas.fill('#7aba85'); canvas.ellipse(10, -26, 19, 9);
-          canvas.fill('#f4a9ba'); canvas.ellipse(-8, -5, 7, 12);
+          // Hand-painted apple silhouette, matched to Yan's original fruit.
+          canvas.fill('#ff6948');
+          canvas.beginShape();
+          canvas.vertex(-1, -29);
+          canvas.bezierVertex(-18, -39, -39, -27, -42, -7);
+          canvas.bezierVertex(-46, 17, -29, 38, -3, 42);
+          canvas.bezierVertex(20, 45, 41, 28, 43, 4);
+          canvas.bezierVertex(45, -18, 28, -34, 10, -31);
+          canvas.bezierVertex(5, -30, 2, -28, -1, -29);
+          canvas.endShape(canvas.CLOSE);
+          canvas.fill('#a96616');
+          canvas.noFill();
+          canvas.stroke('#a96616');
+          canvas.strokeWeight(5);
+          canvas.strokeCap(canvas.ROUND);
+          canvas.bezier(1, -28, 2, -38, 12, -39, 14, -48);
+          canvas.noStroke();
+          canvas.fill('#f6a51b');
+          canvas.ellipse(-12, 2, 12, 18);
           if (appleHasMouth && !appleEatBee) {
             const chomp = Math.abs(Math.sin(canvas.frameCount * 0.22)) * 14 + 5;
             canvas.fill('#382b38'); canvas.ellipse(12, 5, 20, 20 + chomp * 0.2);
