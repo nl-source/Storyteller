@@ -206,9 +206,24 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           const scale = Math.max(w / referenceArtwork.width, h / referenceArtwork.height);
           const imageWidth = referenceArtwork.width * scale;
           const imageHeight = referenceArtwork.height * scale;
-          canvas.image(referenceArtwork, (w - imageWidth) / 2, (h - imageHeight) / 2, imageWidth, imageHeight);
+          const imageX = (w - imageWidth) / 2;
+          const imageY = (h - imageHeight) / 2;
+          canvas.image(referenceArtwork, imageX, imageY, imageWidth, imageHeight);
+          // Hide the source painting's standalone apple so only the spoken vector apple appears.
+          const sourceAppleX = 886;
+          const sourceAppleY = 319;
+          const sourceAppleRadius = 72;
+          canvas.push();
+          canvas.fill('#fff8a5');
+          canvas.ellipse(
+            imageX + sourceAppleX * scale,
+            imageY + sourceAppleY * scale,
+            sourceAppleRadius * 2 * scale,
+            sourceAppleRadius * 1.65 * scale,
+          );
+          canvas.pop();
         }
-        // The reference painting already contains the tree and apples. This overlay keeps the spoken apple animation.
+        // The extracted vector apple appears only after the learner says “apple”.
         if (has('apple')) {
           canvas.push();
           canvas.translate(appleX, appleY);
