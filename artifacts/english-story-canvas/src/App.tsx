@@ -157,6 +157,10 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         const revealProgress = Math.min(1, appleFrames / 36);
         const revealEase = 1 - Math.pow(1 - revealProgress, 3);
         const appleScale = has('apple') ? 0.16 + revealEase * 0.84 : 0;
+        const appleEatBeeFall = appleEatBee ? Math.min(1, Math.max(0, (actionFrames - 42) / 34)) : 0;
+        const appleEatBeeShake = appleEatBee && appleEatBeeFall < 1
+          ? Math.sin(canvas.frameCount * 1.08) * 7 * (1 - appleEatBeeFall)
+          : 0;
         const beeEatAppleChase = beeEatApple ? Math.min(1, actionFrames / 105) : 0;
         const beeEatAppleFall = beeEatApple ? Math.min(1, Math.max(0, (actionFrames - 105) / 35)) : 0;
         const beeAppleShake = beeEatApple && actionFrames >= 72 && actionFrames < 105
@@ -181,14 +185,14 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
               ? h * 0.27 + Math.cos(canvas.frameCount * 0.11) * 44
               : h * 0.34 + Math.cos(canvas.frameCount * 0.06) * 14;
         const appleX = appleEatBee
-          ? w * 0.5 + Math.sin(canvas.frameCount * 0.08) * Math.min(w * 0.32, 190)
+          ? appleHomeX + appleEatBeeShake
           : beeEatApple
             ? appleHomeX + Math.sin(canvas.frameCount * 0.14) * 18 + beeAppleShake
             : appleFlying
               ? w * 0.62 + Math.sin(canvas.frameCount * 0.06) * 42
               : appleHomeX;
         const appleY = appleEatBee
-          ? appleGroundY
+          ? appleHomeY + (appleGroundY - appleHomeY) * appleEatBeeFall
           : beeEatApple
             ? appleHomeY + (appleGroundY - appleHomeY) * beeEatAppleFall
             : appleFlying
@@ -214,7 +218,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           canvas.push();
           canvas.translate(appleX, appleY);
           canvas.scale(appleScale);
-          if (appleFlying || appleEatBee) {
+          if (appleFlying) {
             canvas.fill('#edf8f4'); canvas.ellipse(-22, -24, 30, 17); canvas.ellipse(22, -24, 30, 17);
             canvas.fill('#d4eee8'); canvas.ellipse(-22, -24, 16, 10); canvas.ellipse(22, -24, 16, 10);
           }
@@ -222,14 +226,11 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           canvas.fill('#7d4c39'); canvas.rect(-3, -24, 6, 12, 2);
           canvas.fill('#7aba85'); canvas.ellipse(10, -26, 19, 9);
           canvas.fill('#f4a9ba'); canvas.ellipse(-8, -5, 7, 12);
-          if (appleHasMouth || appleEatBee) {
+          if (appleHasMouth && !appleEatBee) {
             const chomp = Math.abs(Math.sin(canvas.frameCount * 0.22)) * 14 + 5;
-            const mouthWidth = appleEatBee ? 38 : 20;
-            const mouthHeight = appleEatBee ? 30 : 20;
-            canvas.fill('#382b38'); canvas.ellipse(12, 5, mouthWidth, mouthHeight + chomp * (appleEatBee ? 0.35 : 0.2));
+            canvas.fill('#382b38'); canvas.ellipse(12, 5, 20, 20 + chomp * 0.2);
             canvas.fill('#fff9e9');
-            canvas.ellipse(16, -2, appleEatBee ? 10 : 7, appleEatBee ? 7 : 5);
-            canvas.ellipse(7, -2, appleEatBee ? 8 : 5, appleEatBee ? 6 : 4);
+            canvas.ellipse(13, 3, 7, 5);
             canvas.fill('#243b53'); canvas.circle(-8, -5, 4); canvas.circle(9, -7, 4);
           }
           if (beeEatApple && beeEatAppleFall > 0.82) {
@@ -263,14 +264,14 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           }
         }
         // little story footprints / motion trails
-        if (appleFlying || beeFlying || appleEatBee || beeEatApple) {
+        if (appleFlying || beeFlying || beeEatApple) {
           canvas.noFill(); canvas.stroke('#ee8c73'); canvas.strokeWeight(3);
           canvas.arc(w * .5, h * .29, 150, 80, canvas.PI + .2, canvas.TWO_PI - .2);
           canvas.noStroke();
         }
         if (appleEatBee) {
           canvas.fill('#243b53'); canvas.textAlign(canvas.CENTER, canvas.CENTER); canvas.textSize(13); canvas.textStyle(canvas.BOLD);
-          canvas.text('apple says: “come back here!”', w * 0.5, h * 0.91);
+          canvas.text('apple says: “whoops!”', w * 0.5, h * 0.91);
         } else if (beeEatApple) {
           canvas.fill('#243b53'); canvas.textAlign(canvas.CENTER, canvas.CENTER); canvas.textSize(13); canvas.textStyle(canvas.BOLD);
           canvas.text('bee says: “one giant bite!”', w * 0.5, h * 0.91);
