@@ -130,26 +130,34 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         const beeFlying = beeFlies && !appleEatBee;
         const beeX = appleEatBee
           ? w * 0.26 + Math.sin(canvas.frameCount * 0.18) * 22
-          : beeFlies
-            ? w * 0.42 + Math.sin(canvas.frameCount * 0.08) * 72
-            : w * 0.39 + Math.sin(canvas.frameCount * 0.045) * 24;
+          : beeEatApple
+            ? w * 0.68 - 45 + Math.sin(canvas.frameCount * 0.12) * 8
+            : beeFlies
+              ? w * 0.42 + Math.sin(canvas.frameCount * 0.08) * 72
+              : w * 0.39 + Math.sin(canvas.frameCount * 0.045) * 24;
         const beeY = appleEatBee
           ? h * 0.34 + Math.cos(canvas.frameCount * 0.24) * 36
-          : beeFlies
-            ? h * 0.27 + Math.cos(canvas.frameCount * 0.11) * 44
-            : h * 0.34 + Math.cos(canvas.frameCount * 0.06) * 14;
+          : beeEatApple
+            ? h * 0.53 + Math.cos(canvas.frameCount * 0.16) * 10
+            : beeFlies
+              ? h * 0.27 + Math.cos(canvas.frameCount * 0.11) * 44
+              : h * 0.34 + Math.cos(canvas.frameCount * 0.06) * 14;
         const appleHomeX = w * 0.68;
         const appleHomeY = h * 0.53;
         const appleX = appleEatBee
           ? appleHomeX + Math.sin(canvas.frameCount * 0.055) * 4 - Math.min(w * 0.36, 170)
-          : appleFlying
-            ? w * 0.62 + Math.sin(canvas.frameCount * 0.06) * 42
-            : appleHomeX;
+          : beeEatApple
+            ? appleHomeX + Math.sin(canvas.frameCount * 0.09) * 34
+            : appleFlying
+              ? w * 0.62 + Math.sin(canvas.frameCount * 0.06) * 42
+              : appleHomeX;
         const appleY = appleEatBee
           ? appleHomeY + Math.cos(canvas.frameCount * 0.2) * 24
-          : appleFlying
-            ? h * 0.38 + Math.cos(canvas.frameCount * 0.08) * 38
-            : appleHomeY;
+          : beeEatApple
+            ? appleHomeY + Math.cos(canvas.frameCount * 0.13) * 9
+            : appleFlying
+              ? h * 0.38 + Math.cos(canvas.frameCount * 0.08) * 38
+              : appleHomeY;
         const appleScale = 1;
         // soft sun and hand-drawn clouds
         canvas.fill('#ffcf52'); canvas.circle(w * .84, h * .16, 72);
@@ -185,6 +193,11 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             canvas.fill('#fff9e9'); canvas.arc(13, 3, 12, chomp * 0.45, 0, canvas.TWO_PI);
             canvas.fill('#243b53'); canvas.circle(-8, -5, 4); canvas.circle(9, -7, 4);
           }
+          if (beeEatApple) {
+            canvas.fill('#382b38');
+            canvas.circle(13, 5, 9 + Math.sin(canvas.frameCount * 0.22) * 2);
+            canvas.circle(17, -3, 6);
+          }
           canvas.pop();
         }
         // bee with looping flight path
@@ -196,6 +209,8 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           canvas.drawingContext.setLineDash([]); canvas.noStroke();
           if (appleEatBee) {
             canvas.fill('#ef7865'); canvas.textSize(18); canvas.textStyle(canvas.BOLD); canvas.text('RUN!', bx, by - 34);
+          } else if (beeEatApple) {
+            canvas.fill('#ef7865'); canvas.textSize(16); canvas.textStyle(canvas.BOLD); canvas.text('NIBBLE!', bx, by - 34);
           }
           canvas.fill('#f5c84b'); canvas.ellipse(bx, by, 48, 28);
           canvas.fill('#243b53'); canvas.rect(bx - 9, by - 14, 7, 28, 4); canvas.rect(bx + 7, by - 14, 7, 28, 4);
@@ -209,7 +224,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           }
         }
         // little story footprints / motion trails
-        if (appleFlying || beeFlying || appleEatBee) {
+        if (appleFlying || beeFlying || appleEatBee || beeEatApple) {
           canvas.noFill(); canvas.stroke('#ee8c73'); canvas.strokeWeight(3);
           canvas.arc(w * .5, h * .29, 150, 80, canvas.PI + .2, canvas.TWO_PI - .2);
           canvas.noStroke();
@@ -219,7 +234,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           canvas.text('apple says: “snack time!”', w * 0.5, h * 0.91);
         } else if (beeEatApple) {
           canvas.fill('#243b53'); canvas.textAlign(canvas.CENTER, canvas.CENTER); canvas.textSize(13); canvas.textStyle(canvas.BOLD);
-          canvas.text('bee made a questionable choice', w * 0.5, h * 0.91);
+          canvas.text('bee says: “just one bite!”', w * 0.5, h * 0.91);
         }
       };
     };
