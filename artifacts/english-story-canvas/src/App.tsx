@@ -22,6 +22,7 @@ import {
   Waves,
 } from 'lucide-react';
 import {
+  Link,
   Route,
   Switch,
   useLocation,
@@ -310,6 +311,80 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
   return <div ref={holderRef} data-testid="canvas-story-world" className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" aria-label="Animated story world" role="img" />;
 }
 
+function ChapterCard({
+  number,
+  eyebrow,
+  title,
+  description,
+  href,
+  tone,
+  disabled = false,
+}: {
+  number: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  href: string;
+  tone: 'green' | 'orange';
+  disabled?: boolean;
+}) {
+  const content = (
+    <div className={`group relative flex min-h-[210px] flex-col justify-between overflow-hidden rounded-[26px] p-6 transition-transform ${disabled ? 'cursor-default opacity-70' : 'hover:-translate-y-1'} ${tone === 'green' ? 'bg-sidebar text-sidebar-foreground' : 'bg-accent text-accent-foreground'}`}>
+      <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full border-[18px] border-current opacity-15" />
+      <div className="relative flex items-start justify-between">
+        <p className="mono-label opacity-70">{number} / {eyebrow}</p>
+        {!disabled && <ArrowRight className="transition-transform group-hover:translate-x-1" size={22} />}
+      </div>
+      <div className="relative">
+        <h2 className="max-w-[360px] text-3xl font-black tracking-[-.06em]">{title}</h2>
+        <p className="mt-2 max-w-[330px] text-sm font-semibold leading-relaxed opacity-75">{description}</p>
+      </div>
+    </div>
+  );
+  return disabled ? content : <Link href={href}>{content}</Link>;
+}
+
+function Landing() {
+  return (
+    <main className="story-shell text-foreground">
+      <div className="mx-auto flex min-h-[100dvh] max-w-[1200px] flex-col px-5 pb-8 sm:px-8 lg:px-12">
+        <header className="flex items-center justify-between py-6 sm:py-8">
+          <div className="flex items-center gap-3">
+            <div className="grid h-11 w-11 rotate-[-5deg] place-items-center rounded-[14px] bg-primary text-primary-foreground soft-shadow"><BookOpen size={23} strokeWidth={2.5} /></div>
+            <div><p className="text-[17px] font-black leading-none tracking-[-.03em]">Story Canvas</p><p className="mono-label mt-1 text-muted-foreground">a little book of moving pictures</p></div>
+          </div>
+          <p className="hidden text-xs font-bold text-muted-foreground sm:block">English playground · 2026</p>
+        </header>
+        <section className="flex flex-1 flex-col justify-center py-8">
+          <div className="max-w-[760px]">
+            <p className="mono-label mb-4 text-primary">a story in chapters</p>
+            <h1 className="text-[clamp(3.5rem,10vw,8rem)] font-black leading-[.85] tracking-[-.09em]">Make something<br /><span className="text-secondary">move.</span></h1>
+            <p className="mt-7 max-w-[540px] text-lg font-semibold leading-relaxed text-muted-foreground">Speak a word, watch a world appear, and follow the little accidents that happen next.</p>
+          </div>
+          <div className="mt-12 grid gap-4 sm:grid-cols-2">
+            <ChapterCard number="01" eyebrow="make a story" title="Your voice draws the world." description="Build a silly English story with a hand-painted tree, a bee, and an apple that waits for its cue." href="/story" tone="green" />
+            <ChapterCard number="02" eyebrow="moving nature" title="Let the garden breathe." description="A new chapter is growing here. Soon, the leaves, flowers, and tiny creatures will move with you." href="/moving-nature" tone="orange" />
+          </div>
+        </section>
+        <footer className="flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>chapter 01 is ready to play</span><span>和大人一起玩</span></footer>
+      </div>
+    </main>
+  );
+}
+
+function MovingNature() {
+  return (
+    <main className="story-shell grid min-h-[100dvh] place-items-center px-5 text-foreground">
+      <section className="max-w-[560px] rounded-[28px] bg-card p-8 text-center scribble-border sm:p-12">
+        <p className="mono-label text-primary">02 / moving nature</p>
+        <h1 className="mt-3 text-5xl font-black tracking-[-.08em]">The garden is waking up.</h1>
+        <p className="mt-5 font-semibold leading-relaxed text-muted-foreground">This chapter is still growing. Come back after you finish making a story.</p>
+        <Link href="/" className="mt-8 inline-flex min-h-12 items-center gap-2 rounded-full bg-primary px-5 font-black text-primary-foreground transition-transform hover:-translate-y-0.5"><ArrowRight className="rotate-180" size={18} /> Back to chapters</Link>
+      </section>
+    </main>
+  );
+}
+
 function Home() {
   const [heard, setHeard] = useState('');
   const [words, setWords] = useState<Word[]>([]);
@@ -538,7 +613,9 @@ function Router() {
     // survives a page crash.
     <RoutedErrorBoundary>
       <Switch>
-        <Route path="/" component={Home} />
+        <Route path="/" component={Landing} />
+        <Route path="/story" component={Home} />
+        <Route path="/moving-nature" component={MovingNature} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
