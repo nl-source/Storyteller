@@ -492,6 +492,46 @@ function Home() {
                  words played
               </div>
             </div>
+            <section className="mb-8 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+              <div className="rounded-[24px] bg-card p-5 scribble-border sm:p-6">
+                <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="mono-label text-primary">02 / silly word lab</p>
+                    <h2 className="mt-1 text-2xl font-black tracking-[-.05em]">Only four words. Endless trouble.</h2>
+                    <p className="mt-1 text-sm font-semibold text-muted-foreground">Tap or say a word. Try them in a new order.</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-black text-secondary" data-testid="text-vocabulary-progress">
+                    <span className="text-2xl">{foundCount}</span><span className="text-muted-foreground">/ 4 words found</span>
+                  </div>
+                </div>
+                <div className="mb-5 h-3 overflow-hidden rounded-full bg-muted" aria-label={`${foundCount} of 4 vocabulary words found`}>
+                  <div className="h-full rounded-full bg-secondary transition-[width] duration-500" style={{ width: `${(foundCount / 4) * 100}%` }} />
+                </div>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  {vocabulary.map(({ word, hint, color }) => {
+                    const found = words.includes(word);
+                    return (
+                      <button key={word} onClick={() => addWord(word)} data-testid={`button-word-${word}`} className={`group relative min-h-[86px] rounded-[16px] border-2 p-3 text-left transition-transform hover:-translate-y-1 active:translate-y-0 ${found ? 'border-secondary bg-secondary/10' : 'border-border bg-background'}`}>
+                        <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${color === 'coral' ? 'bg-primary' : color === 'yellow' || color === 'sun' ? 'bg-accent' : color === 'teal' || color === 'mint' ? 'bg-secondary' : 'bg-[#b7a4da]'}`} />
+                        <span className="block text-lg font-black tracking-[-.04em]">{word}</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold text-muted-foreground">{hint}</span>
+                        {found && <Check size={16} className="absolute bottom-3 right-3 text-secondary" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="dot-field flex min-h-[150px] flex-col justify-between rounded-[24px] bg-accent p-5 text-accent-foreground sm:min-w-[220px] sm:p-6">
+                <div className="flex items-start justify-between">
+                  <CircleHelp size={23} />
+                  <Flower2 className="wiggle" size={30} />
+                </div>
+                <div>
+                  <p className="text-lg font-black leading-tight">Need a little help?</p>
+                  <p className="mt-1 text-xs font-bold leading-snug opacity-70">Listen for the word, then repeat it.</p>
+                </div>
+              </div>
+            </section>
             <div className="paper-shadow canvas-grid relative flex min-h-[330px] flex-1 overflow-hidden rounded-[28px] bg-card p-2 sm:min-h-[430px] sm:p-3">
               <StoryCanvas activeWords={words} />
               <div className="absolute left-5 top-5 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-secondary scribble-border backdrop-blur-sm">
@@ -555,47 +595,6 @@ function Home() {
                </div>
             </div>
           </aside>
-        </section>
-
-        <section className="mt-8 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div className="rounded-[24px] bg-card p-5 scribble-border sm:p-6">
-            <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="mono-label text-primary">02 / silly word lab</p>
-                <h2 className="mt-1 text-2xl font-black tracking-[-.05em]">Only four words. Endless trouble.</h2>
-                <p className="mt-1 text-sm font-semibold text-muted-foreground">Tap or say a word. Try them in a new order.</p>
-              </div>
-              <div className="flex items-center gap-2 text-sm font-black text-secondary" data-testid="text-vocabulary-progress">
-                <span className="text-2xl">{foundCount}</span><span className="text-muted-foreground">/ 4 words found</span>
-              </div>
-            </div>
-            <div className="mb-5 h-3 overflow-hidden rounded-full bg-muted" aria-label={`${foundCount} of 4 vocabulary words found`}>
-              <div className="h-full rounded-full bg-secondary transition-[width] duration-500" style={{ width: `${(foundCount / 4) * 100}%` }} />
-            </div>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              {vocabulary.map(({ word, hint, color }) => {
-                const found = words.includes(word);
-                return (
-                  <button key={word} onClick={() => addWord(word)} data-testid={`button-word-${word}`} className={`group relative min-h-[86px] rounded-[16px] border-2 p-3 text-left transition-transform hover:-translate-y-1 active:translate-y-0 ${found ? 'border-secondary bg-secondary/10' : 'border-border bg-background'}`}>
-                    <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${color === 'coral' ? 'bg-primary' : color === 'yellow' || color === 'sun' ? 'bg-accent' : color === 'teal' || color === 'mint' ? 'bg-secondary' : 'bg-[#b7a4da]'}`} />
-                    <span className="block text-lg font-black tracking-[-.04em]">{word}</span>
-                    <span className="mt-0.5 block text-[11px] font-semibold text-muted-foreground">{hint}</span>
-                    {found && <Check size={16} className="absolute bottom-3 right-3 text-secondary" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="dot-field flex min-h-[150px] flex-col justify-between rounded-[24px] bg-accent p-5 text-accent-foreground sm:min-w-[220px] sm:p-6">
-            <div className="flex items-start justify-between">
-              <CircleHelp size={23} />
-              <Flower2 className="wiggle" size={30} />
-            </div>
-            <div>
-              <p className="text-lg font-black leading-tight">Need a little help?</p>
-              <p className="mt-1 text-xs font-bold leading-snug opacity-70">Listen for the word, then repeat it.</p>
-            </div>
-          </div>
         </section>
 
         <footer className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground">
