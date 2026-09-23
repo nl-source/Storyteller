@@ -363,7 +363,7 @@ function Landing() {
           </div>
           <div className="mt-12 grid gap-4 sm:grid-cols-2">
             <ChapterCard number="01" eyebrow="make a story" title="Your voice draws the world." description="Build a silly English story with a hand-painted tree, a bee, and an apple that waits for its cue." href="/story" tone="green" />
-            <ChapterCard number="02" eyebrow="moving nature" title="Let the garden breathe." description="A new chapter is growing here. Soon, the leaves, flowers, and tiny creatures will move with you." href="/moving-nature" tone="orange" />
+            <ChapterCard number="02" eyebrow="moving nature" title="Everything moves in nature!" description="A new chapter is growing here. Soon, the leaves, flowers, and tiny creatures will move with you." href="/moving-nature" tone="orange" />
           </div>
         </section>
         <footer className="flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>chapter 01 is ready to play</span><span>Play with a friend<br />和朋友一起玩</span></footer>
