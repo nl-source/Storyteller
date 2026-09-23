@@ -366,7 +366,7 @@ function Landing() {
             <ChapterCard number="02" eyebrow="moving nature" title="Let the garden breathe." description="A new chapter is growing here. Soon, the leaves, flowers, and tiny creatures will move with you." href="/moving-nature" tone="orange" />
           </div>
         </section>
-        <footer className="flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>chapter 01 is ready to play</span><span>和大人一起玩</span></footer>
+        <footer className="flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>chapter 01 is ready to play</span><span>Play with a friend<br />和朋友一起玩</span></footer>
       </div>
     </main>
   );
