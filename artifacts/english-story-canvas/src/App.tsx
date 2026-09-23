@@ -351,7 +351,7 @@ function Landing() {
         <header className="flex items-center justify-between py-6 sm:py-8">
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-11 rotate-[-5deg] place-items-center rounded-[14px] bg-primary text-primary-foreground soft-shadow"><BookOpen size={23} strokeWidth={2.5} /></div>
-            <div><p className="text-[17px] font-black leading-none tracking-[-.03em]">Story Canvas</p><p className="mono-label mt-1 text-muted-foreground">a little book of moving pictures</p></div>
+            <div><p className="text-[17px] font-black leading-none tracking-[-.03em]">DreamOral</p><p className="mono-label mt-1 text-muted-foreground">a little book of moving pictures</p></div>
           </div>
           <p className="hidden text-xs font-bold text-muted-foreground sm:block">English playground · 2026</p>
         </header>
