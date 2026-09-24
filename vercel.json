@@ -1,6 +1,6 @@
 {
-  "buildCommand": "pnpm --filter @workspace/english-story-canvas build",
-  "outputDirectory": "artifacts/english-story-canvas/dist",
+  "buildCommand": "pnpm --filter @workspace/english-story-canvas build && rm -rf public && cp -R artifacts/english-story-canvas/dist public",
+  "outputDirectory": "public",
   "installCommand": "pnpm install --frozen-lockfile",
   "framework": "vite"
 }
