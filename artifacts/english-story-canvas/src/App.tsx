@@ -22,6 +22,7 @@ import {
   Waves,
 } from 'lucide-react';
 import {
+  Link,
   Route,
   Switch,
   useLocation,
@@ -95,6 +96,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
       let appleRevealFrame = -1;
       let beeRevealFrame = -1;
       let actionStartFrame = -1;
+      let referenceArtwork: p5.Image;
       const getWords = () => activeRef.current;
       const has = (word: Word) => getWords().includes(word);
       const hasInOrder = (sequence: Word[]) => {
@@ -106,6 +108,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         return false;
       };
       canvas.setup = () => {
+        referenceArtwork = canvas.loadImage('/yan-tree-apple.jpg');
         const box = holderRef.current?.getBoundingClientRect();
         w = Math.max(280, Math.floor(box?.width ?? 620));
         h = Math.max(300, Math.min(460, Math.floor(w * 0.63)));
@@ -123,6 +126,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
       canvas.draw = () => {
         canvas.clear();
         canvas.noStroke();
+        canvas.background('#dff3f0');
         const sequence = getWords().join(' ');
         if (sequence !== previousSequence) {
           if (!previousSequence.includes('apple') && sequence.includes('apple')) {
@@ -208,53 +212,30 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             : appleFlying
               ? h * 0.38 + Math.cos(canvas.frameCount * 0.08) * 38
               : appleHomeY;
-        // Bright hand-painted scene inspired by the reference palette.
-        canvas.background('#fff28b');
-        canvas.fill('#ffec78');
-        canvas.ellipse(w * .22, h * .18, 180, 54);
-        canvas.ellipse(w * .51, h * .08, 220, 42);
-        canvas.ellipse(w * .82, h * .24, 170, 52);
-        canvas.fill('#f3d66c');
-        canvas.rect(0, h * .8, w, h * .2);
-        // Small paper-cut leaves and a flower keep the scene playful without hiding the tree.
-        canvas.fill('#2b9e62');
-        canvas.ellipse(w * .15, h * .26, 42, 15);
-        canvas.ellipse(w * .19, h * .3, 28, 12);
-        canvas.ellipse(w * .47, h * .19, 36, 13);
-        canvas.fill('#ed6b45');
-        canvas.circle(w * .48, h * .3, 9);
-        canvas.fill('#f6a948');
-        canvas.circle(w * .48, h * .3, 4);
-        canvas.fill('#2b9e62');
-        canvas.stroke('#2b9e62'); canvas.strokeWeight(4);
-        canvas.line(w * .48, h * .32, w * .46, h * .39);
-        canvas.line(w * .46, h * .39, w * .42, h * .37);
-        canvas.line(w * .46, h * .39, w * .5, h * .36);
-        canvas.noStroke();
-        // The complete tree stays in the scene, with an organic green crown and warm orange trunk.
-        canvas.fill('#e99a3f');
-        canvas.beginShape();
-        canvas.vertex(w * .65, h * .82);
-        canvas.vertex(w * .69, h * .82);
-        canvas.vertex(w * .71, h * .52);
-        canvas.vertex(w * .75, h * .47);
-        canvas.vertex(w * .71, h * .44);
-        canvas.vertex(w * .67, h * .5);
-        canvas.vertex(w * .67, h * .82);
-        canvas.endShape(canvas.CLOSE);
-        canvas.fill('#edaa4a');
-        canvas.ellipse(w * .67, h * .82, 75, 15);
-        canvas.fill('#249d62');
-        canvas.ellipse(w * .62, h * .43, 126, 104);
-        canvas.ellipse(w * .73, h * .36, 112, 112);
-        canvas.ellipse(w * .81, h * .45, 100, 92);
-        canvas.fill('#2bab68');
-        canvas.ellipse(w * .7, h * .29, 98, 86);
-        canvas.ellipse(w * .58, h * .49, 78, 70);
-        canvas.fill('#3ab66e');
-        canvas.ellipse(w * .78, h * .3, 62, 54);
-        canvas.ellipse(w * .67, h * .49, 58, 48);
-        // Apple is hidden until the child says "apple".
+        // Yan's artwork supplies the warm paper, leafy tree, and hand-painted apples.
+        canvas.background('#fff8a5');
+        if (referenceArtwork?.width) {
+          const scale = Math.max(w / referenceArtwork.width, h / referenceArtwork.height);
+          const imageWidth = referenceArtwork.width * scale;
+          const imageHeight = referenceArtwork.height * scale;
+          const imageX = (w - imageWidth) / 2;
+          const imageY = (h - imageHeight) / 2;
+          canvas.image(referenceArtwork, imageX, imageY, imageWidth, imageHeight);
+          // Hide the source painting's standalone apple so only the spoken vector apple appears.
+          const sourceAppleX = 886;
+          const sourceAppleY = 319;
+          const sourceAppleRadius = 72;
+          canvas.push();
+          canvas.fill('#fff8a5');
+          canvas.ellipse(
+            imageX + sourceAppleX * scale,
+            imageY + sourceAppleY * scale,
+            sourceAppleRadius * 2 * scale,
+            sourceAppleRadius * 1.65 * scale,
+          );
+          canvas.pop();
+        }
+        // The extracted vector apple appears only after the learner says “apple”.
         if (has('apple')) {
           canvas.push();
           canvas.translate(appleX, appleY);
@@ -263,10 +244,25 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             canvas.fill('#edf8f4'); canvas.ellipse(-22, -24, 30, 17); canvas.ellipse(22, -24, 30, 17);
             canvas.fill('#d4eee8'); canvas.ellipse(-22, -24, 16, 10); canvas.ellipse(22, -24, 16, 10);
           }
-          canvas.fill('#f26745'); canvas.circle(0, 0, 38);
-          canvas.fill('#dc8638'); canvas.rect(-3, -24, 6, 12, 2);
-          canvas.fill('#2b9e62'); canvas.ellipse(10, -26, 19, 9);
-          canvas.fill('#ff9a64'); canvas.ellipse(-8, -5, 7, 12);
+          // Hand-painted apple silhouette, matched to Yan's original fruit.
+          canvas.fill('#ff6948');
+          canvas.beginShape();
+          canvas.vertex(-1, -29);
+          canvas.bezierVertex(-18, -39, -39, -27, -42, -7);
+          canvas.bezierVertex(-46, 17, -29, 38, -3, 42);
+          canvas.bezierVertex(20, 45, 41, 28, 43, 4);
+          canvas.bezierVertex(45, -18, 28, -34, 10, -31);
+          canvas.bezierVertex(5, -30, 2, -28, -1, -29);
+          canvas.endShape(canvas.CLOSE);
+          canvas.fill('#a96616');
+          canvas.noFill();
+          canvas.stroke('#a96616');
+          canvas.strokeWeight(5);
+          canvas.strokeCap(canvas.ROUND);
+          canvas.bezier(1, -28, 2, -38, 12, -39, 14, -48);
+          canvas.noStroke();
+          canvas.fill('#f6a51b');
+          canvas.ellipse(-12, 2, 12, 18);
           if (appleEating) {
             const chomp = Math.abs(Math.sin(canvas.frameCount * 0.22)) * 14 + 5;
             canvas.fill('#382b38'); canvas.ellipse(12, 5, 20, 20 + chomp * 0.2);
@@ -313,19 +309,6 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           canvas.arc(w * .5, h * .29, 150, 80, canvas.PI + .2, canvas.TWO_PI - .2);
           canvas.noStroke();
         }
-        if ((appleFlying || beeFlying) && !hasChaseAction) {
-          canvas.fill('#243b53');
-          canvas.textAlign(canvas.CENTER, canvas.CENTER);
-          canvas.textSize(12);
-          canvas.textStyle(canvas.BOLD);
-          canvas.text('WHOOSH!', w * 0.5, h * 0.72);
-        } else if ((appleEating || beeEating) && !hasChaseAction) {
-          canvas.fill('#243b53');
-          canvas.textAlign(canvas.CENTER, canvas.CENTER);
-          canvas.textSize(12);
-          canvas.textStyle(canvas.BOLD);
-          canvas.text('tiny chomp mode', w * 0.5, h * 0.72);
-        }
         if (appleEatBee) {
           canvas.fill('#243b53'); canvas.textAlign(canvas.CENTER, canvas.CENTER); canvas.textSize(13); canvas.textStyle(canvas.BOLD);
           canvas.text('apple says: “whoops!”', w * 0.5, h * 0.91);
@@ -340,6 +323,80 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
   }, []);
 
   return <div ref={holderRef} data-testid="canvas-story-world" className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" aria-label="Animated story world" role="img" />;
+}
+
+function ChapterCard({
+  number,
+  eyebrow,
+  title,
+  description,
+  href,
+  tone,
+  disabled = false,
+}: {
+  number: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  href: string;
+  tone: 'green' | 'orange';
+  disabled?: boolean;
+}) {
+  const content = (
+    <div className={`group relative flex min-h-[210px] flex-col justify-between overflow-hidden rounded-[26px] p-6 transition-transform ${disabled ? 'cursor-default opacity-70' : 'hover:-translate-y-1'} ${tone === 'green' ? 'bg-sidebar text-sidebar-foreground' : 'bg-accent text-accent-foreground'}`}>
+      <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full border-[18px] border-current opacity-15" />
+      <div className="relative flex items-start justify-between">
+        <p className="mono-label opacity-70">{number} / {eyebrow}</p>
+        {!disabled && <ArrowRight className="transition-transform group-hover:translate-x-1" size={22} />}
+      </div>
+      <div className="relative">
+        <h2 className="max-w-[360px] text-3xl font-black tracking-[-.06em]">{title}</h2>
+        <p className="mt-2 max-w-[330px] text-sm font-semibold leading-relaxed opacity-75">{description}</p>
+      </div>
+    </div>
+  );
+  return disabled ? content : <Link href={href}>{content}</Link>;
+}
+
+function Landing() {
+  return (
+    <main className="story-shell text-foreground">
+      <div className="mx-auto flex min-h-[100dvh] max-w-[1200px] flex-col px-5 pb-8 sm:px-8 lg:px-12">
+        <header className="flex items-center justify-between py-6 sm:py-8">
+          <div className="flex items-center gap-3">
+            <div className="grid h-11 w-11 rotate-[-5deg] place-items-center rounded-[14px] bg-primary text-primary-foreground soft-shadow"><BookOpen size={23} strokeWidth={2.5} /></div>
+            <div><p className="text-[17px] font-black leading-none tracking-[-.03em]">DreamOral</p><p className="mono-label mt-1 text-muted-foreground">a little book of moving pictures</p></div>
+          </div>
+          <p className="hidden text-xs font-bold text-muted-foreground sm:block">English playground · 2026</p>
+        </header>
+        <section className="flex flex-1 flex-col justify-center py-8">
+          <div className="max-w-[760px]">
+            <p className="mono-label mb-4 text-primary">a story in chapters</p>
+            <h1 className="text-[clamp(3.5rem,10vw,8rem)] font-black leading-[.85] tracking-[-.09em]">Make something<br /><span className="text-secondary">move.</span></h1>
+            <p className="mt-7 max-w-[540px] text-lg font-semibold leading-relaxed text-muted-foreground">Speak a word, watch a world appear, and follow the little accidents that happen next.</p>
+          </div>
+          <div className="mt-12 grid gap-4 sm:grid-cols-2">
+            <ChapterCard number="01" eyebrow="make a story" title="Your voice draws the world." description="Build a silly English story with a hand-painted tree, a bee, and an apple that waits for its cue." href="/story" tone="green" />
+            <ChapterCard number="02" eyebrow="moving nature" title="Everything moves in nature!" description="A new chapter is growing here. Soon, the leaves, flowers, and tiny creatures will move with you." href="/moving-nature" tone="orange" />
+          </div>
+        </section>
+        <footer className="flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>chapter 01 is ready to play</span><span>Play with a friend<br />和朋友一起玩</span></footer>
+      </div>
+    </main>
+  );
+}
+
+function MovingNature() {
+  return (
+    <main className="story-shell grid min-h-[100dvh] place-items-center px-5 text-foreground">
+      <section className="max-w-[560px] rounded-[28px] bg-card p-8 text-center scribble-border sm:p-12">
+        <p className="mono-label text-primary">02 / moving nature</p>
+        <h1 className="mt-3 text-5xl font-black tracking-[-.08em]">The garden is waking up.</h1>
+        <p className="mt-5 font-semibold leading-relaxed text-muted-foreground">This chapter is still growing. Come back after you finish making a story.</p>
+        <Link href="/" className="mt-8 inline-flex min-h-12 items-center gap-2 rounded-full bg-primary px-5 font-black text-primary-foreground transition-transform hover:-translate-y-0.5"><ArrowRight className="rotate-180" size={18} /> Back to chapters</Link>
+      </section>
+    </main>
+  );
 }
 
 function Home() {
@@ -449,6 +506,46 @@ function Home() {
                  words played
               </div>
             </div>
+            <section className="mb-8 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+              <div className="rounded-[24px] bg-card p-5 scribble-border sm:p-6">
+                <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="mono-label text-primary">02 / silly word lab</p>
+                    <h2 className="mt-1 text-2xl font-black tracking-[-.05em]">Only four words. Endless trouble.</h2>
+                    <p className="mt-1 text-sm font-semibold text-muted-foreground">Tap or say a word. Try them in a new order.</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-black text-secondary" data-testid="text-vocabulary-progress">
+                    <span className="text-2xl">{foundCount}</span><span className="text-muted-foreground">/ 4 words found</span>
+                  </div>
+                </div>
+                <div className="mb-5 h-3 overflow-hidden rounded-full bg-muted" aria-label={`${foundCount} of 4 vocabulary words found`}>
+                  <div className="h-full rounded-full bg-secondary transition-[width] duration-500" style={{ width: `${(foundCount / 4) * 100}%` }} />
+                </div>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  {vocabulary.map(({ word, hint, color }) => {
+                    const found = words.includes(word);
+                    return (
+                      <button key={word} onClick={() => addWord(word)} data-testid={`button-word-${word}`} className={`group relative min-h-[86px] rounded-[16px] border-2 p-3 text-left transition-transform hover:-translate-y-1 active:translate-y-0 ${found ? 'border-secondary bg-secondary/10' : 'border-border bg-background'}`}>
+                        <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${color === 'coral' ? 'bg-primary' : color === 'yellow' || color === 'sun' ? 'bg-accent' : color === 'teal' || color === 'mint' ? 'bg-secondary' : 'bg-[#b7a4da]'}`} />
+                        <span className="block text-lg font-black tracking-[-.04em]">{word}</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold text-muted-foreground">{hint}</span>
+                        {found && <Check size={16} className="absolute bottom-3 right-3 text-secondary" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="dot-field flex min-h-[150px] flex-col justify-between rounded-[24px] bg-accent p-5 text-accent-foreground sm:min-w-[220px] sm:p-6">
+                <div className="flex items-start justify-between">
+                  <CircleHelp size={23} />
+                  <Flower2 className="wiggle" size={30} />
+                </div>
+                <div>
+                  <p className="text-lg font-black leading-tight">Need a little help?</p>
+                  <p className="mt-1 text-xs font-bold leading-snug opacity-70">Listen for the word, then repeat it.</p>
+                </div>
+              </div>
+            </section>
             <div className="paper-shadow canvas-grid relative flex min-h-[330px] flex-1 overflow-hidden rounded-[28px] bg-card p-2 sm:min-h-[430px] sm:p-3">
               <StoryCanvas activeWords={words} />
               <div className="absolute left-5 top-5 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-secondary scribble-border backdrop-blur-sm">
@@ -514,47 +611,6 @@ function Home() {
           </aside>
         </section>
 
-        <section className="mt-8 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div className="rounded-[24px] bg-card p-5 scribble-border sm:p-6">
-            <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="mono-label text-primary">02 / silly word lab</p>
-                <h2 className="mt-1 text-2xl font-black tracking-[-.05em]">Only four words. Endless trouble.</h2>
-                <p className="mt-1 text-sm font-semibold text-muted-foreground">Tap or say a word. Try them in a new order.</p>
-              </div>
-              <div className="flex items-center gap-2 text-sm font-black text-secondary" data-testid="text-vocabulary-progress">
-                <span className="text-2xl">{foundCount}</span><span className="text-muted-foreground">/ 4 words found</span>
-              </div>
-            </div>
-            <div className="mb-5 h-3 overflow-hidden rounded-full bg-muted" aria-label={`${foundCount} of 4 vocabulary words found`}>
-              <div className="h-full rounded-full bg-secondary transition-[width] duration-500" style={{ width: `${(foundCount / 4) * 100}%` }} />
-            </div>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              {vocabulary.map(({ word, hint, color }) => {
-                const found = words.includes(word);
-                return (
-                  <button key={word} onClick={() => addWord(word)} aria-pressed={found} data-testid={`button-word-${word}`} className={`group relative min-h-[86px] rounded-[16px] border-2 p-3 text-left transition-[transform,background-color,border-color] hover:-translate-y-1 active:translate-y-0 ${found ? 'border-secondary bg-secondary/10' : 'border-border bg-background'}`}>
-                    <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${color === 'coral' ? 'bg-primary' : color === 'yellow' || color === 'sun' ? 'bg-accent' : color === 'teal' || color === 'mint' ? 'bg-secondary' : 'bg-[#b7a4da]'}`} />
-                    <span className="block text-lg font-black tracking-[-.04em]">{word}</span>
-                    <span className="mt-0.5 block text-[11px] font-semibold text-muted-foreground">{hint}</span>
-                    {found && <Check size={16} className="absolute bottom-3 right-3 text-secondary" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="dot-field flex min-h-[150px] flex-col justify-between rounded-[24px] bg-accent p-5 text-accent-foreground sm:min-w-[220px] sm:p-6">
-            <div className="flex items-start justify-between">
-              <CircleHelp size={23} />
-              <Flower2 className="wiggle" size={30} />
-            </div>
-            <div>
-              <p className="text-lg font-black leading-tight">Need a little help?</p>
-              <p className="mt-1 text-xs font-bold leading-snug opacity-70">Listen for the word, then repeat it.</p>
-            </div>
-          </div>
-        </section>
-
         <footer className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground">
           <p className="flex items-center gap-2"><Headphones size={14} /> Best with a grown-up nearby <span className="text-muted-foreground/60">|</span> 和大人一起玩</p>
           <p className="flex items-center gap-2"><Info size={14} /> Microphone uses English (US) recognition</p>
@@ -570,7 +626,9 @@ function Router() {
     // survives a page crash.
     <RoutedErrorBoundary>
       <Switch>
-        <Route path="/" component={Home} />
+        <Route path="/" component={Landing} />
+        <Route path="/story" component={Home} />
+        <Route path="/moving-nature" component={MovingNature} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
