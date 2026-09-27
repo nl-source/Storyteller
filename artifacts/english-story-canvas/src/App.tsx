@@ -448,6 +448,8 @@ function NatureCanvas({ action }: { action: NatureAction }) {
         const duration = (actionWord === 'blow' ? 105 : 75) * (0.7 + actionStrength * 0.6);
         const progress = Math.max(0, 1 - elapsed / duration);
         const blowProgress = Math.min(1, elapsed / duration);
+        const settleProgress = Math.min(1, elapsed / duration);
+        const settleEase = 1 - Math.pow(1 - settleProgress, 3);
         const gust = progress * progress;
         const isBlowing = actionWord === 'blow' && progress > 0;
         const isWindy = actionWord === 'wind' && progress > 0;
@@ -458,10 +460,15 @@ function NatureCanvas({ action }: { action: NatureAction }) {
         const treeSway = isBlowing
           ? Math.sin(elapsed * (0.13 + actionStrength * 0.12)) * (0.025 + actionStrength * 0.2) * gust
           : Math.sin(canvas.frameCount * 0.018) * 0.012;
+        const canopySway = isBlowing
+          ? actionStrength >= 0.85
+            ? 0
+            : Math.sin(elapsed * (0.13 + actionStrength * 0.12)) * (0.045 + actionStrength * 0.16) * (1 - settleProgress)
+          : 0;
         const cloudShift = isBlowing
           ? actionStrength >= 0.85
             ? blowProgress * w * 1.15
-            : Math.sin(elapsed * (0.06 + actionStrength * 0.12)) * w * 0.06 * actionStrength
+            : (actionStrength < 0.4 ? w * 0.045 : w * 0.12) * settleEase
           : isWindy
             ? Math.sin(elapsed * 0.11) * w * 0.018 * actionStrength
             : 0;
@@ -519,7 +526,7 @@ function NatureCanvas({ action }: { action: NatureAction }) {
             : 1;
           canvas.push();
           canvas.translate(w * 0.72, h * 0.72);
-          canvas.rotate(treeSway);
+          canvas.rotate(treeSway + canopySway);
           canvas.drawingContext.globalAlpha = canopyFade;
           const canopy = [
             [-35, -h * 0.48, 76, 72, '#3caa70'],
@@ -615,6 +622,8 @@ function MovingNature() {
   const ignoreRecognitionEndRef = useRef(false);
   const transcriptRef = useRef('');
   const peakVolumeRef = useRef(0);
+  const volumeTotalRef = useRef(0);
+  const volumeSampleCountRef = useRef(0);
   const micStreamRef = useRef<MediaStream | null>(null);
   const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -777,8 +786,10 @@ function MovingNature() {
       return;
     }
 
-    const peak = peakVolumeRef.current;
-    const level = peak < 0.035 ? 0 : peak < 0.085 ? 1 : 2;
+    const averageVolume = volumeSampleCountRef.current > 0
+      ? volumeTotalRef.current / volumeSampleCountRef.current
+      : peakVolumeRef.current;
+    const level = averageVolume < 0.035 ? 0 : averageVolume < 0.11 ? 1 : 2;
     const strength = [0.2, 0.58, 1][level];
     const levelMessage = [
       'A little breeze / 微风轻轻吹',
@@ -828,7 +839,10 @@ function MovingNature() {
       analyserRef.current.getFloatTimeDomainData(samples);
       let sum = 0;
       for (const sample of samples) sum += sample * sample;
-      peakVolumeRef.current = Math.max(peakVolumeRef.current, Math.sqrt(sum / samples.length));
+      const volume = Math.sqrt(sum / samples.length);
+      peakVolumeRef.current = Math.max(peakVolumeRef.current, volume);
+      volumeTotalRef.current += volume;
+      volumeSampleCountRef.current += 1;
       meterFrameRef.current = requestAnimationFrame(sampleVolume);
     };
     sampleVolume();
@@ -855,6 +869,8 @@ function MovingNature() {
     ignoreRecognitionEndRef.current = false;
     transcriptRef.current = '';
     peakVolumeRef.current = 0;
+    volumeTotalRef.current = 0;
+    volumeSampleCountRef.current = 0;
     setIsHoldingMic(true);
     setStatus('Listening… say “wind”, then “blow”. / 正在听，请分别说 wind 和 blow。');
 
