@@ -397,7 +397,7 @@ function Landing() {
 }
 
 type NatureWord = 'wind' | 'blow';
-type NatureAction = { word: NatureWord; id: number; strength: number };
+type NatureAction = { word: NatureWord | null; id: number; strength: number };
 
 function NatureCanvas({ action }: { action: NatureAction }) {
   const holderRef = useRef<HTMLDivElement>(null);
@@ -599,14 +599,18 @@ function NatureCanvas({ action }: { action: NatureAction }) {
 }
 
 function MovingNature() {
-  const [action, setAction] = useState<NatureAction>({ word: 'wind', id: 0, strength: 0.65 });
+  const [action, setAction] = useState<NatureAction>({ word: null, id: 0, strength: 0 });
   const [activeWord, setActiveWord] = useState<NatureWord | null>(null);
   const [status, setStatus] = useState('Tap a word to hear it and make the garden move.');
   const [isHoldingMic, setIsHoldingMic] = useState(false);
-  const [showVolumeGuide, setShowVolumeGuide] = useState(true);
+  const [showVolumeGuide, setShowVolumeGuide] = useState(false);
+  const [showVolumeToast, setShowVolumeToast] = useState(false);
+  const [stars, setStars] = useState(0);
+  const [flowStep, setFlowStep] = useState<'single-word' | 'phrase'>('single-word');
   const audioContextRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<SpeechLike | null>(null);
   const pressActiveRef = useRef(false);
+  const finishRequestedRef = useRef(false);
   const ignoreRecognitionEndRef = useRef(false);
   const transcriptRef = useRef('');
   const peakVolumeRef = useRef(0);
@@ -615,6 +619,7 @@ function MovingNature() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterFrameRef = useRef<number | null>(null);
   const sequenceTimeoutRef = useRef<number | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
 
   const stopMicrophoneMeter = () => {
     if (meterFrameRef.current !== null) {
@@ -631,11 +636,16 @@ function MovingNature() {
   useEffect(() => () => {
     pressActiveRef.current = false;
     ignoreRecognitionEndRef.current = true;
+    finishRequestedRef.current = true;
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     if (sequenceTimeoutRef.current !== null) {
       window.clearTimeout(sequenceTimeoutRef.current);
       sequenceTimeoutRef.current = null;
+    }
+    if (toastTimeoutRef.current !== null) {
+      window.clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
     }
     stopMicrophoneMeter();
     void audioContextRef.current?.close();
@@ -725,12 +735,39 @@ function MovingNature() {
     }
   };
 
+  const showVolumePrompt = () => {
+    setShowVolumeToast(true);
+    if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      toastTimeoutRef.current = null;
+      setShowVolumeToast(false);
+    }, 3600);
+  };
+
   const finishSpokenWords = () => {
     const transcript = transcriptRef.current.toLowerCase();
     const spokeWind = /\bwind\b/.test(transcript);
     const spokeBlow = /\bblow\b/.test(transcript);
     if (!spokeWind && !spokeBlow) {
       setStatus('I didn’t catch “wind” or “blow”. Try again. / 没听清，请再试一次。');
+      return;
+    }
+
+    if (flowStep === 'single-word') {
+      if (spokeWind && spokeBlow) {
+        setStatus('Start with one word: “wind” or “blow”. / 第一步请只说一个单词：wind 或 blow。');
+        return;
+      }
+      const word: NatureWord = spokeWind ? 'wind' : 'blow';
+      setStars((current) => current + 1);
+      setFlowStep('phrase');
+      showVolumePrompt();
+      void activateWord(word, 0.2, 'Great word! / 单词说得好！');
+      return;
+    }
+
+    if (!(spokeWind && spokeBlow)) {
+      setStatus('Step 2 needs the full phrase “wind blow”. / 第二步请完整说出 wind blow。');
       return;
     }
 
@@ -743,15 +780,7 @@ function MovingNature() {
       'A big gust! / 大风吹走了树叶和云',
     ][level];
     const spokenFeedback = `${levelMessage} · Heard “${transcript.trim()}”`;
-    if (spokeWind && spokeBlow) {
-      void activateWord('wind', strength, spokenFeedback);
-      sequenceTimeoutRef.current = window.setTimeout(() => {
-        sequenceTimeoutRef.current = null;
-        void activateWord('blow', strength, spokenFeedback);
-      }, 900);
-      return;
-    }
-    void activateWord(spokeBlow ? 'blow' : 'wind', strength, spokenFeedback);
+    void activateWord('blow', strength, spokenFeedback);
   };
 
   const startMicrophoneMeter = async () => {
@@ -812,6 +841,7 @@ function MovingNature() {
     }
 
     pressActiveRef.current = true;
+    finishRequestedRef.current = false;
     if (sequenceTimeoutRef.current !== null) {
       window.clearTimeout(sequenceTimeoutRef.current);
       sequenceTimeoutRef.current = null;
@@ -824,7 +854,7 @@ function MovingNature() {
 
     const recognition = new Recognition();
     recognition.lang = 'en-US';
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
       transcriptRef.current = Array.from(
@@ -850,20 +880,9 @@ function MovingNature() {
         ignoreRecognitionEndRef.current = false;
         return;
       }
-      if (pressActiveRef.current) {
-        try {
-          recognition.start();
-          recognitionRef.current = recognition;
-          return;
-        } catch (error) {
-          console.error('Unable to restart speech recognition:', error);
-          pressActiveRef.current = false;
-          setIsHoldingMic(false);
-          stopMicrophoneMeter();
-          setStatus('Speech recognition stopped. Please try again. / 语音识别已停止，请再试一次。');
-          return;
-        }
-      }
+      pressActiveRef.current = false;
+      finishRequestedRef.current = false;
+      setIsHoldingMic(false);
       stopMicrophoneMeter();
       finishSpokenWords();
     };
@@ -877,6 +896,7 @@ function MovingNature() {
       pressActiveRef.current = false;
       setIsHoldingMic(false);
       ignoreRecognitionEndRef.current = true;
+      finishRequestedRef.current = true;
       try {
         recognition.stop();
       } catch (stopError) {
@@ -892,11 +912,38 @@ function MovingNature() {
     if (!pressActiveRef.current) return;
     pressActiveRef.current = false;
     setIsHoldingMic(false);
+    finishRequestedRef.current = true;
     stopMicrophoneMeter();
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       setStatus('Finishing… / 正在完成识别…');
     }
+  };
+
+  const toggleListening = () => {
+    if (isHoldingMic) stopSpeaking();
+    else void startSpeaking();
+  };
+
+  const resetNature = () => {
+    pressActiveRef.current = false;
+    finishRequestedRef.current = true;
+    ignoreRecognitionEndRef.current = true;
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    stopMicrophoneMeter();
+    window.speechSynthesis?.cancel();
+    if (sequenceTimeoutRef.current !== null) window.clearTimeout(sequenceTimeoutRef.current);
+    if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
+    sequenceTimeoutRef.current = null;
+    toastTimeoutRef.current = null;
+    setIsHoldingMic(false);
+    setActiveWord(null);
+    setStars(0);
+    setFlowStep('single-word');
+    setShowVolumeToast(false);
+    setStatus('Fresh garden! Say one word to begin. / 花园重新开始！先说一个单词。');
+    setAction((current) => ({ word: null, id: current.id + 1, strength: 0 }));
   };
 
   const speechWindow = typeof window === 'undefined' ? undefined : window as Window & {
@@ -924,9 +971,9 @@ function MovingNature() {
               Try different voices!<br />试试不同的音量！
             </DialogTitle>
             <DialogDescription className="pt-2 text-sm font-semibold leading-relaxed">
-              Hold the microphone and say “wind”, then “blow”. Whisper, speak normally, or use a big voice to change the gust.
+              Tap the microphone and say one word first. Then tap again and say “wind blow”. Whisper, speak normally, or use a big voice to change the gust.
               <br />
-              <span className="mt-2 block">按住麦克风，分别说 wind 和 blow。试试小声、平常音量和大声说，看看风会有什么变化。</span>
+              <span className="mt-2 block">点击麦克风先说一个单词，再次点击后说 wind blow。试试小声、平常音量和大声说，看看风会有什么变化。</span>
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 rounded-[16px] bg-muted p-4 text-sm font-bold">
@@ -943,6 +990,16 @@ function MovingNature() {
           </button>
         </DialogContent>
       </Dialog>
+      <Dialog open={showVolumeToast} onOpenChange={setShowVolumeToast}>
+        <DialogContent className="max-w-sm rounded-[22px] border-2 border-secondary bg-card p-6 text-center">
+          <DialogTitle className="text-xl font-black tracking-[-.03em]">
+            Try different volumes!<br />试试不同音量！
+          </DialogTitle>
+          <DialogDescription className="mt-2 text-sm font-semibold leading-relaxed">
+            Now say the full phrase “wind blow”.<br />现在说完整短语 “wind blow”。
+          </DialogDescription>
+        </DialogContent>
+      </Dialog>
       <div className="mx-auto flex min-h-[100dvh] max-w-[1320px] flex-col px-4 pb-8 sm:px-7 lg:px-10">
         <header className="flex items-center justify-between py-5 sm:py-7">
           <Link href="/" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold transition-transform hover:-translate-y-0.5">
@@ -957,6 +1014,7 @@ function MovingNature() {
               <p className="mono-label mt-1 text-muted-foreground">chapter 02 · listen & move</p>
             </div>
           </div>
+          <div className="w-11" aria-hidden="true" />
         </header>
 
         <section className="mb-6">
@@ -974,6 +1032,19 @@ function MovingNature() {
             <NatureCanvas action={action} />
             <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-secondary scribble-border backdrop-blur-sm">
               <span className="inline-block h-2 w-2 rounded-full bg-secondary" /> living garden
+            </div>
+            <div className="absolute right-5 top-5 flex items-center gap-2">
+              <div className="flex items-center gap-1 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-primary scribble-border backdrop-blur-sm" aria-label={`${stars} stars earned`} data-testid="text-nature-stars">
+                <Sparkles size={14} /> {stars}
+              </div>
+              <button
+                type="button"
+                onClick={resetNature}
+                data-testid="button-reset-moving-nature"
+                className="flex min-h-9 items-center gap-1.5 rounded-full bg-card/95 px-3 py-1.5 text-[11px] font-extrabold text-foreground scribble-border backdrop-blur-sm transition-transform hover:-translate-y-0.5 active:translate-y-0"
+              >
+                <RotateCcw size={14} /> Start Over
+              </button>
             </div>
             {activeWord && (
               <div className="absolute right-5 top-5 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-primary scribble-border backdrop-blur-sm" data-testid="text-wind-strength">
@@ -996,32 +1067,17 @@ function MovingNature() {
             </div>
             <button
               type="button"
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                void startSpeaking();
-              }}
-              onPointerUp={stopSpeaking}
-              onPointerCancel={stopSpeaking}
+              onClick={toggleListening}
               onKeyDown={(event) => {
-                if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
-                  event.preventDefault();
-                  void startSpeaking();
-                }
-              }}
-              onKeyUp={(event) => {
                 if (event.key === ' ' || event.key === 'Enter') {
                   event.preventDefault();
-                  stopSpeaking();
                 }
               }}
-              onBlur={stopSpeaking}
-              onContextMenu={(event) => event.preventDefault()}
               aria-label={isHoldingMic
-                ? 'Listening. Release when you finish saying wind and blow.'
-                : 'Hold to say wind and blow'}
+                ? 'Listening. Tap again when you finish speaking.'
+                : 'Tap to say wind or blow'}
               aria-pressed={isHoldingMic}
-              data-testid="button-hold-to-speak-nature"
+              data-testid="button-toggle-listening-nature"
               className={`flex min-h-[78px] w-full touch-none items-center justify-between rounded-[20px] px-5 text-left text-base font-black text-sidebar-primary-foreground transition-transform active:scale-[.99] ${isHoldingMic ? 'bg-primary listen-ring' : 'bg-secondary hover:-translate-y-0.5'}`}
             >
               <span className="flex items-center gap-3">
@@ -1029,8 +1085,8 @@ function MovingNature() {
                   {isHoldingMic ? <Waves size={22} /> : <Mic size={22} />}
                 </span>
                 <span>
-                  <span className="block">{isHoldingMic ? 'Listening… / 正在听…' : 'Hold to speak / 按住说话'}</span>
-                  <span className="mt-1 block text-xs font-bold opacity-80">“wind”… “blow”</span>
+                  <span className="block">{isHoldingMic ? 'Listening… / 正在听…' : 'Tap to listen / 点击开始听'}</span>
+                  <span className="mt-1 block text-xs font-bold opacity-80">{flowStep === 'single-word' ? 'Say one word / 说一个单词' : 'Say “wind blow” / 说 wind blow'}</span>
                 </span>
               </span>
               {isHoldingMic ? <MicOff size={20} /> : <Volume2 size={20} />}
@@ -1077,7 +1133,7 @@ function MovingNature() {
 
         <footer className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground">
           <p className="flex items-center gap-2"><Headphones size={14} /> Listen to each word, then try saying it aloud.</p>
-          <p className="flex items-center gap-2"><Info size={14} /> Hold the mic or tap a word / 按住麦克风或点选单词</p>
+          <p className="flex items-center gap-2"><Info size={14} /> Tap the mic or tap a word / 点击麦克风或单词</p>
         </footer>
       </div>
     </main>
