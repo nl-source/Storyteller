@@ -7,6 +7,8 @@ import NotFound from '@/pages/not-found';
 import p5 from 'p5';
 import {
   ArrowRight,
+  ArrowDown,
+  Bot,
   BookOpen,
   Check,
   Cloud,
@@ -18,6 +20,8 @@ import {
   Leaf,
   Mic,
   MicOff,
+  Phone,
+  PhoneOff,
   RotateCcw,
   Sparkles,
   Volume2,
@@ -613,11 +617,12 @@ function MovingNature() {
   const [isHoldingMic, setIsHoldingMic] = useState(false);
   const [showVolumeGuide, setShowVolumeGuide] = useState(false);
   const [showVolumeToast, setShowVolumeToast] = useState(false);
-  const [showReflectionDialog, setShowReflectionDialog] = useState(false);
-  const [reflectionAnswer, setReflectionAnswer] = useState('');
-  const [reflectionReply, setReflectionReply] = useState('');
+  const [showChatDialog, setShowChatDialog] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: 'child' | 'bot'; text: string }>>([]);
+  const [isBotLive, setIsBotLive] = useState(false);
+  const [isBotListening, setIsBotListening] = useState(false);
   const [isReplySpeaking, setIsReplySpeaking] = useState(false);
-  const [isAnswering, setIsAnswering] = useState(false);
+  const [showBotHint, setShowBotHint] = useState(false);
   const [starBurst, setStarBurst] = useState(false);
   const [stars, setStars] = useState(0);
   const [flowStep, setFlowStep] = useState<'single-word' | 'phrase'>('single-word');
@@ -638,6 +643,8 @@ function MovingNature() {
   const toastTimeoutRef = useRef<number | null>(null);
   const starTimeoutRef = useRef<number | null>(null);
   const reflectionTimeoutRef = useRef<number | null>(null);
+  const botRecognitionRef = useRef<SpeechLike | null>(null);
+  const botLiveRef = useRef(false);
 
   const stopMicrophoneMeter = () => {
     if (meterFrameRef.current !== null) {
@@ -667,6 +674,9 @@ function MovingNature() {
     }
     if (starTimeoutRef.current !== null) window.clearTimeout(starTimeoutRef.current);
     if (reflectionTimeoutRef.current !== null) window.clearTimeout(reflectionTimeoutRef.current);
+    botLiveRef.current = false;
+    botRecognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
     stopMicrophoneMeter();
     void audioContextRef.current?.close();
     audioContextRef.current = null;
@@ -690,9 +700,10 @@ function MovingNature() {
     }
   };
 
-  const speakReflectionReply = (reply: string) => {
+  const speakReflectionReply = (reply: string, onComplete?: () => void) => {
     if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
       setStatus('Voice reply is not supported in this browser. / 此浏览器不支持语音回复。');
+      onComplete?.();
       return;
     }
     window.speechSynthesis.cancel();
@@ -704,13 +715,22 @@ function MovingNature() {
       utterance.pitch = 1.08;
       return utterance;
     });
-    if (utterances.length === 0) return;
+    if (utterances.length === 0) {
+      onComplete?.();
+      return;
+    }
     setIsReplySpeaking(true);
     utterances.forEach((utterance, index) => {
       utterance.onend = () => {
-        if (index === utterances.length - 1) setIsReplySpeaking(false);
+        if (index === utterances.length - 1) {
+          setIsReplySpeaking(false);
+          onComplete?.();
+        }
       };
-      utterance.onerror = () => setIsReplySpeaking(false);
+      utterance.onerror = () => {
+        setIsReplySpeaking(false);
+        onComplete?.();
+      };
       window.speechSynthesis.speak(utterance);
     });
   };
@@ -866,7 +886,7 @@ function MovingNature() {
       if (reflectionTimeoutRef.current !== null) window.clearTimeout(reflectionTimeoutRef.current);
       reflectionTimeoutRef.current = window.setTimeout(() => {
         reflectionTimeoutRef.current = null;
-        setShowReflectionDialog(true);
+        setShowBotHint(true);
       }, animationDuration);
     });
   };
@@ -874,8 +894,7 @@ function MovingNature() {
   const askReflection = async (answer: string) => {
     const trimmed = answer.trim();
     if (!trimmed) return;
-    setReflectionAnswer(trimmed);
-    setReflectionReply('Thinking of a warm answer… / 我正在想一个温暖的回答……');
+    setChatMessages((messages) => [...messages, { role: 'child', text: trimmed }]);
     try {
       const response = await fetch('/api/nature/reflection', {
         method: 'POST',
@@ -885,46 +904,79 @@ function MovingNature() {
       if (!response.ok) throw new Error(`Reflection request failed with ${response.status}`);
       const data = await response.json() as { reply?: string };
       const reply = data.reply || 'That is a lovely idea! The wind gave the clouds and leaves a little push. / 这是个可爱的想法！风给了云和树叶一点点推力。';
-      setReflectionReply(reply);
-      speakReflectionReply(reply);
+      setChatMessages((messages) => [...messages, { role: 'bot', text: reply }]);
+      speakReflectionReply(reply, () => {
+        if (botLiveRef.current) window.setTimeout(startBotListening, 250);
+      });
     } catch (error) {
       console.error('Unable to get the nature reflection:', error);
       const reply = 'That is a lovely idea! The wind gave the clouds and leaves a little push. / 这是个可爱的想法！风给了云和树叶一点点推力。';
-      setReflectionReply(reply);
-      speakReflectionReply(reply);
+      setChatMessages((messages) => [...messages, { role: 'bot', text: reply }]);
+      speakReflectionReply(reply, () => {
+        if (botLiveRef.current) window.setTimeout(startBotListening, 250);
+      });
     }
   };
 
-  const listenForReflection = () => {
+  const startBotListening = () => {
     const speechWindow = window as Window & {
       SpeechRecognition?: SpeechConstructor;
       webkitSpeechRecognition?: SpeechConstructor;
     };
     const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (!Recognition || isAnswering) return;
+    if (!Recognition || !botLiveRef.current || botRecognitionRef.current) return;
     const recognition = new Recognition();
     recognition.lang = 'zh-CN';
     recognition.continuous = false;
     recognition.interimResults = false;
-    setIsAnswering(true);
+    botRecognitionRef.current = recognition;
+    setIsBotListening(true);
     recognition.onresult = (event) => {
       const answer = Array.from(
         { length: event.results.length },
         (_, index) => event.results[index]?.[0]?.transcript ?? '',
       ).join(' ');
-      void askReflection(answer);
+      if (answer) void askReflection(answer);
     };
     recognition.onerror = (event) => {
       console.error('Reflection voice recognition failed:', event.error);
-      setReflectionReply('I could not hear you yet. You can try again or type your answer. / 我还没听清，你可以再试一次，或者输入答案。');
-      setIsAnswering(false);
+      setStatus('The little robot could not hear you. Try again. / 小机器人没有听清，再试一次吧。');
+      setIsBotListening(false);
+      botRecognitionRef.current = null;
     };
-    recognition.onend = () => setIsAnswering(false);
+    recognition.onend = () => {
+      setIsBotListening(false);
+      botRecognitionRef.current = null;
+    };
     try {
       recognition.start();
     } catch (error) {
-      console.error('Unable to start reflection voice recognition:', error);
-      setIsAnswering(false);
+      console.error('Unable to start robot voice recognition:', error);
+      setIsBotListening(false);
+      botRecognitionRef.current = null;
+    }
+  };
+
+  const toggleBotChat = () => {
+    if (isBotLive) {
+      botLiveRef.current = false;
+      botRecognitionRef.current?.stop();
+      botRecognitionRef.current = null;
+      window.speechSynthesis?.cancel();
+      setIsBotLive(false);
+      setIsBotListening(false);
+      return;
+    }
+    setShowChatDialog(true);
+    setShowBotHint(false);
+    setIsBotLive(true);
+    botLiveRef.current = true;
+    if (chatMessages.length === 0) {
+      const greeting = 'Hi, little explorer! Tell me what you noticed in the garden. / 你好，小小探索家！告诉我你在花园里发现了什么吧。';
+      setChatMessages([{ role: 'bot', text: greeting }]);
+      speakReflectionReply(greeting, () => window.setTimeout(startBotListening, 250));
+    } else {
+      startBotListening();
     }
   };
 
@@ -1094,11 +1146,15 @@ function MovingNature() {
     setStars(0);
     setFlowStep('single-word');
     setShowVolumeToast(false);
-    setShowReflectionDialog(false);
-    setReflectionAnswer('');
-    setReflectionReply('');
+    botLiveRef.current = false;
+    botRecognitionRef.current?.stop();
+    setShowChatDialog(false);
+    setChatMessages([]);
+    setIsBotLive(false);
+    setIsBotListening(false);
     setIsReplySpeaking(false);
     setStarBurst(false);
+    setShowBotHint(false);
     setStatus('Fresh garden! Say one word to begin. / 花园重新开始！先说一个单词。');
     setAction((current) => ({ word: null, id: current.id + 1, strength: 0 }));
   };
@@ -1157,55 +1213,39 @@ function MovingNature() {
           </DialogDescription>
         </DialogContent>
       </Dialog>
-      <Dialog open={showReflectionDialog} onOpenChange={setShowReflectionDialog}>
-        <DialogContent className="max-w-md rounded-[24px] border-2 border-secondary bg-card p-7 sm:p-8">
+      <Dialog open={showChatDialog} onOpenChange={(open) => {
+        setShowChatDialog(open);
+        if (!open && isBotLive) toggleBotChat();
+      }}>
+        <DialogContent className="max-w-md rounded-[24px] border-2 border-secondary bg-card p-6 sm:p-7">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black tracking-[-.04em]">
-              Why did the clouds and tree move?<br />为什么云和树都动了呢？
+            <DialogTitle className="flex items-center gap-2 text-2xl font-black tracking-[-.04em]">
+              <Bot className="text-secondary" /> Garden Buddy
             </DialogTitle>
-            <DialogDescription className="pt-2 text-sm font-semibold leading-relaxed">
-              Tell me in English or Chinese. / 可以用中文或英文告诉我。
+            <DialogDescription>
+              Talk with the garden robot in English or Chinese. / 用中文或英文和花园机器人聊天。
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4 flex gap-2">
-            <input
-              value={reflectionAnswer}
-              onChange={(event) => setReflectionAnswer(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void askReflection(reflectionAnswer);
-              }}
-              placeholder="The wind pushed them... / 因为风吹动了它们……"
-              className="min-h-11 min-w-0 flex-1 rounded-full border-2 border-border bg-background px-4 text-sm font-semibold outline-none focus:border-primary"
-              aria-label="Your answer"
-            />
+          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto rounded-[18px] bg-muted p-3" aria-live="polite">
+            {chatMessages.map((message, index) => (
+              <p key={`${message.role}-${index}`} className={`rounded-[14px] p-3 text-sm font-bold leading-relaxed ${message.role === 'bot' ? 'mr-6 bg-card' : 'ml-6 bg-secondary/20'}`}>
+                {message.text}
+              </p>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-xs font-bold text-muted-foreground">
+              {isBotListening ? 'Listening… / 正在听…' : isReplySpeaking ? 'Buddy is speaking… / 机器人正在说话…' : 'Tap the phone to talk. / 点击电话开始说话。'}
+            </span>
             <button
               type="button"
-              onClick={() => void askReflection(reflectionAnswer)}
-              className="min-h-11 rounded-full bg-primary px-4 text-sm font-black text-primary-foreground"
+              onClick={toggleBotChat}
+              className={`grid h-14 w-14 shrink-0 place-items-center rounded-full text-white transition-transform hover:scale-105 ${isBotLive ? 'bg-destructive' : 'bg-secondary'}`}
+              aria-label={isBotLive ? 'End garden buddy chat' : 'Start garden buddy chat'}
             >
-              Send
+              {isBotLive ? <PhoneOff size={23} /> : <Phone size={23} />}
             </button>
           </div>
-          <button
-            type="button"
-            onClick={listenForReflection}
-            disabled={isAnswering}
-            className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-border bg-muted px-4 text-sm font-black transition-transform hover:-translate-y-0.5 disabled:opacity-60"
-          >
-            <Mic size={17} /> {isAnswering ? 'Listening… / 正在听…' : 'Answer by voice / 用声音回答'}
-          </button>
-          {reflectionReply && (
-            <div className="mt-4 rounded-[16px] bg-secondary/15 p-4" role="status">
-              <p className="text-sm font-bold leading-relaxed">{reflectionReply}</p>
-              <button
-                type="button"
-                onClick={() => speakReflectionReply(reflectionReply)}
-                className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-full bg-card px-3 text-xs font-black"
-              >
-                <Volume2 size={14} /> {isReplySpeaking ? 'Speaking… / 正在说…' : 'Hear reply / 听回复'}
-              </button>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
       <div className="mx-auto flex min-h-[100dvh] max-w-[1320px] flex-col px-4 pb-8 sm:px-7 lg:px-10">
@@ -1222,14 +1262,7 @@ function MovingNature() {
               <p className="mono-label mt-1 text-muted-foreground">chapter 02 · listen & move</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={resetNature}
-            data-testid="button-reset-moving-nature"
-            className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-3.5 text-sm font-extrabold transition-transform hover:-translate-y-0.5 active:translate-y-0"
-          >
-            <RotateCcw size={16} /> <span className="hidden sm:inline">Start Over</span>
-          </button>
+          <div className="w-11" aria-hidden="true" />
         </header>
 
         <section className="mb-6">
@@ -1270,6 +1303,14 @@ function MovingNature() {
           </div>
 
           <aside className="flex flex-col gap-4">
+            <button
+              type="button"
+              onClick={resetNature}
+              data-testid="button-reset-moving-nature"
+              className="flex min-h-14 items-center justify-center gap-2 rounded-[20px] border-2 border-border bg-card px-5 text-base font-black transition-transform hover:-translate-y-0.5 active:translate-y-0"
+            >
+              <RotateCcw size={19} /> Start Over / 重新开始
+            </button>
             <div className="rounded-[24px] bg-sidebar p-5 text-sidebar-foreground soft-shadow sm:p-6">
               <p className="mono-label text-sidebar-primary">target language</p>
               <h2 className="mt-1 text-2xl font-black tracking-[-.04em]">Listen. Then make it move.</h2>
@@ -1277,32 +1318,46 @@ function MovingNature() {
                 Tap a word to hear its pronunciation and see it come to life.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={toggleListening}
-              onKeyDown={(event) => {
-                if (event.key === ' ' || event.key === 'Enter') {
-                  event.preventDefault();
-                }
-              }}
-              aria-label={isHoldingMic
-                ? 'Listening. Tap again when you finish speaking.'
-                : 'Tap to say wind or blow'}
-              aria-pressed={isHoldingMic}
-              data-testid="button-toggle-listening-nature"
-              className={`flex min-h-[78px] w-full touch-none items-center justify-between rounded-[20px] px-5 text-left text-base font-black text-sidebar-primary-foreground transition-transform active:scale-[.99] ${isHoldingMic ? 'bg-primary listen-ring' : 'bg-secondary hover:-translate-y-0.5'}`}
-            >
-              <span className="flex items-center gap-3">
-                <span className="grid h-11 w-11 place-items-center rounded-full bg-white/20">
-                  {isHoldingMic ? <Waves size={22} /> : <Mic size={22} />}
+            <div className="relative flex gap-3">
+              <button
+                type="button"
+                onClick={toggleListening}
+                onKeyDown={(event) => {
+                  if (event.key === ' ' || event.key === 'Enter') event.preventDefault();
+                }}
+                aria-label={isHoldingMic ? 'Listening. Tap again when you finish speaking.' : 'Tap to say wind or blow'}
+                aria-pressed={isHoldingMic}
+                data-testid="button-toggle-listening-nature"
+                className={`flex min-h-[78px] min-w-0 flex-1 touch-none items-center justify-between rounded-[20px] px-5 text-left text-base font-black text-sidebar-primary-foreground transition-transform active:scale-[.99] ${isHoldingMic ? 'bg-primary listen-ring' : 'bg-secondary hover:-translate-y-0.5'}`}
+              >
+                <span className="flex items-center gap-3">
+                  <span className="grid h-11 w-11 place-items-center rounded-full bg-white/20">
+                    {isHoldingMic ? <Waves size={22} /> : <Mic size={22} />}
+                  </span>
+                  <span>
+                    <span className="block">{isHoldingMic ? 'Listening… / 正在听…' : 'Tap to listen / 点击开始听'}</span>
+                    <span className="mt-1 block text-xs font-bold opacity-80">{flowStep === 'single-word' ? 'Say one word / 说一个单词' : 'Say “wind blow” / 说 wind blow'}</span>
+                  </span>
                 </span>
-                <span>
-                  <span className="block">{isHoldingMic ? 'Listening… / 正在听…' : 'Tap to listen / 点击开始听'}</span>
-                  <span className="mt-1 block text-xs font-bold opacity-80">{flowStep === 'single-word' ? 'Say one word / 说一个单词' : 'Say “wind blow” / 说 wind blow'}</span>
-                </span>
-              </span>
-              {isHoldingMic ? <MicOff size={20} /> : <Volume2 size={20} />}
-            </button>
+                {isHoldingMic ? <MicOff size={20} /> : <Volume2 size={20} />}
+              </button>
+              <button
+                type="button"
+                onClick={toggleBotChat}
+                data-testid="button-garden-buddy"
+                aria-label="Talk with Garden Buddy"
+                className={`relative grid min-h-[78px] w-[82px] shrink-0 place-items-center rounded-[20px] border-2 border-secondary bg-card text-secondary transition-transform hover:-translate-y-0.5 ${showBotHint ? 'animate-bounce' : ''}`}
+              >
+                <Bot size={31} />
+                <span className="absolute -bottom-1 rounded-full bg-secondary px-1.5 py-0.5 text-[9px] font-black text-secondary-foreground">AI</span>
+              </button>
+              {showBotHint && (
+                <div className="pointer-events-none absolute -right-2 -top-16 flex flex-col items-center text-center text-xs font-black text-primary">
+                  <span className="rounded-full bg-card px-3 py-1.5 shadow-md">Talk to me!<br />来和我聊天吧！</span>
+                  <ArrowDown size={22} />
+                </div>
+              )}
+            </div>
             {!speechSupported && (
               <p className="text-xs font-semibold leading-relaxed text-muted-foreground" role="status">
                 Voice recognition is unavailable; tap either word card instead. / 暂不支持语音识别，请点击下方单词卡。
