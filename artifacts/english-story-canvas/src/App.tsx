@@ -497,7 +497,6 @@ function NatureCanvas({ action }: { action: NatureAction }) {
 
         canvas.push();
         canvas.translate(w * 0.72, h * 0.72);
-        canvas.rotate(treeSway);
         canvas.fill('#9a603e');
         canvas.beginShape();
         canvas.vertex(-15, h * 0.18);
@@ -512,12 +511,15 @@ function NatureCanvas({ action }: { action: NatureAction }) {
         canvas.vertex(12, -h * 0.27);
         canvas.vertex(17, h * 0.18);
         canvas.endShape(canvas.CLOSE);
+        canvas.pop();
 
         if (!leavesBlownAway) {
           const canopyFade = actionWord === 'blow' && actionStrength >= 0.85
             ? Math.max(0, 1 - Math.max(0, (blowProgress - 0.5) / 0.32))
             : 1;
           canvas.push();
+          canvas.translate(w * 0.72, h * 0.72);
+          canvas.rotate(treeSway);
           canvas.drawingContext.globalAlpha = canopyFade;
           const canopy = [
             [-35, -h * 0.48, 76, 72, '#3caa70'],
@@ -532,7 +534,6 @@ function NatureCanvas({ action }: { action: NatureAction }) {
           });
           canvas.pop();
         }
-        canvas.pop();
 
         canvas.fill('#fff3a0');
         canvas.circle(w * 0.13, h * 0.16, 43);
@@ -708,25 +709,30 @@ function MovingNature() {
     return true;
   };
 
-  const activateWord = async (word: NatureWord, strength = 0.65, spokenFeedback?: string) => {
+  const activateWord = async (
+    word: NatureWord,
+    strength = 0.65,
+    spokenFeedback?: string,
+    withAudio = true,
+  ) => {
     if (sequenceTimeoutRef.current !== null) {
       window.clearTimeout(sequenceTimeoutRef.current);
       sequenceTimeoutRef.current = null;
     }
     setActiveWord(word);
     setAction((current) => ({ word, id: current.id + 1, strength }));
-    const voiceAvailable = playPronunciation(word);
+    const voiceAvailable = withAudio && playPronunciation(word);
     if (word === 'blow') {
       try {
-        const soundAvailable = await playWindSound(strength);
-        const speechStatus = voiceAvailable ? '“Blow!”' : 'Spoken pronunciation is not supported in this browser.';
+        const soundAvailable = withAudio && await playWindSound(strength);
+        const speechStatus = voiceAvailable ? '“Blow!”' : '';
         const soundStatus = soundAvailable
           ? 'The clouds drift, the tree sways, and the wind goes whoooosh.'
-          : 'The garden moves, but wind sound is not supported in this browser.';
-        setStatus(`${spokenFeedback ? `${spokenFeedback} · ` : ''}${speechStatus} ${soundStatus}`);
+          : withAudio ? 'The garden moves, but wind sound is not supported in this browser.' : 'The garden responds to your voice.';
+        setStatus(`${spokenFeedback ? `${spokenFeedback} · ` : ''}${speechStatus}${speechStatus ? ' ' : ''}${soundStatus}`);
       } catch (error) {
         console.error('Unable to play the wind sound:', error);
-        setStatus(`${spokenFeedback ? `${spokenFeedback} · ` : ''}${voiceAvailable ? '“Blow!”' : 'Spoken pronunciation is not supported in this browser.'} The garden moved, but the wind sound could not be played.`);
+        setStatus(`${spokenFeedback ? `${spokenFeedback} · ` : ''}${withAudio ? `${voiceAvailable ? '“Blow!”' : 'Spoken pronunciation is not supported in this browser.'} The garden moved, but the wind sound could not be played.` : 'The garden responds to your voice.'}`);
       }
     } else {
       setStatus(voiceAvailable
@@ -762,7 +768,7 @@ function MovingNature() {
       setStars((current) => current + 1);
       setFlowStep('phrase');
       showVolumePrompt();
-      void activateWord(word, 0.2, 'Great word! / 单词说得好！');
+      void activateWord(word, 0.2, 'Great word! / 单词说得好！', false);
       return;
     }
 
@@ -780,7 +786,7 @@ function MovingNature() {
       'A big gust! / 大风吹走了树叶和云',
     ][level];
     const spokenFeedback = `${levelMessage} · Heard “${transcript.trim()}”`;
-    void activateWord('blow', strength, spokenFeedback);
+    void activateWord('blow', strength, spokenFeedback, false);
   };
 
   const startMicrophoneMeter = async () => {
@@ -1016,7 +1022,14 @@ function MovingNature() {
               <p className="mono-label mt-1 text-muted-foreground">chapter 02 · listen & move</p>
             </div>
           </div>
-          <div className="w-11" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={resetNature}
+            data-testid="button-reset-moving-nature"
+            className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-3.5 text-sm font-extrabold transition-transform hover:-translate-y-0.5 active:translate-y-0"
+          >
+            <RotateCcw size={16} /> <span className="hidden sm:inline">Start Over</span>
+          </button>
         </header>
 
         <section className="mb-6">
@@ -1035,21 +1048,13 @@ function MovingNature() {
             <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-secondary scribble-border backdrop-blur-sm">
               <span className="inline-block h-2 w-2 rounded-full bg-secondary" /> living garden
             </div>
-            <div className="absolute right-5 top-5 flex items-center gap-2">
+            <div className="absolute right-5 top-5">
               <div className="flex items-center gap-1 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-primary scribble-border backdrop-blur-sm" aria-label={`${stars} stars earned`} data-testid="text-nature-stars">
                 <Sparkles size={14} /> {stars}
               </div>
-              <button
-                type="button"
-                onClick={resetNature}
-                data-testid="button-reset-moving-nature"
-                className="flex min-h-9 items-center gap-1.5 rounded-full bg-card/95 px-3 py-1.5 text-[11px] font-extrabold text-foreground scribble-border backdrop-blur-sm transition-transform hover:-translate-y-0.5 active:translate-y-0"
-              >
-                <RotateCcw size={14} /> Start Over
-              </button>
             </div>
             {activeWord && (
-              <div className="absolute right-5 top-5 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-primary scribble-border backdrop-blur-sm" data-testid="text-wind-strength">
+              <div className="absolute right-5 top-14 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-primary scribble-border backdrop-blur-sm" data-testid="text-wind-strength">
                 {action.strength < 0.4 ? 'soft breeze / 微风' : action.strength < 0.85 ? 'breezy / 轻风' : 'strong gust / 大风'}
               </div>
             )}
