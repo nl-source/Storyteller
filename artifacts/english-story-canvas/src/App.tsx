@@ -613,6 +613,11 @@ function MovingNature() {
   const [isHoldingMic, setIsHoldingMic] = useState(false);
   const [showVolumeGuide, setShowVolumeGuide] = useState(false);
   const [showVolumeToast, setShowVolumeToast] = useState(false);
+  const [showReflectionDialog, setShowReflectionDialog] = useState(false);
+  const [reflectionAnswer, setReflectionAnswer] = useState('');
+  const [reflectionReply, setReflectionReply] = useState('');
+  const [isAnswering, setIsAnswering] = useState(false);
+  const [starBurst, setStarBurst] = useState(false);
   const [stars, setStars] = useState(0);
   const [flowStep, setFlowStep] = useState<'single-word' | 'phrase'>('single-word');
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -630,6 +635,8 @@ function MovingNature() {
   const meterFrameRef = useRef<number | null>(null);
   const sequenceTimeoutRef = useRef<number | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const starTimeoutRef = useRef<number | null>(null);
+  const reflectionTimeoutRef = useRef<number | null>(null);
 
   const stopMicrophoneMeter = () => {
     if (meterFrameRef.current !== null) {
@@ -657,6 +664,8 @@ function MovingNature() {
       window.clearTimeout(toastTimeoutRef.current);
       toastTimeoutRef.current = null;
     }
+    if (starTimeoutRef.current !== null) window.clearTimeout(starTimeoutRef.current);
+    if (reflectionTimeoutRef.current !== null) window.clearTimeout(reflectionTimeoutRef.current);
     stopMicrophoneMeter();
     void audioContextRef.current?.close();
     audioContextRef.current = null;
@@ -718,6 +727,30 @@ function MovingNature() {
     return true;
   };
 
+  const playRewardDing = async () => {
+    const AudioContextConstructor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    const context = audioContextRef.current ?? new AudioContextConstructor();
+    audioContextRef.current = context;
+    if (context.state === 'suspended') await context.resume();
+    const now = context.currentTime;
+    [880, 1320].forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, now + index * 0.08);
+      gain.gain.setValueAtTime(0.0001, now + index * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + index * 0.08 + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.08 + 0.22);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(now + index * 0.08);
+      oscillator.stop(now + index * 0.08 + 0.24);
+    });
+  };
+
   const activateWord = async (
     word: NatureWord,
     strength = 0.65,
@@ -775,9 +808,14 @@ function MovingNature() {
       }
       const word: NatureWord = spokeWind ? 'wind' : 'blow';
       setStars((current) => current + 1);
+      setStarBurst(true);
+      if (starTimeoutRef.current !== null) window.clearTimeout(starTimeoutRef.current);
+      starTimeoutRef.current = window.setTimeout(() => setStarBurst(false), 1200);
       setFlowStep('phrase');
-      showVolumePrompt();
-      void activateWord(word, 0.2, 'Great word! / 单词说得好！', false);
+      void activateWord(word, 0.2, 'Great word! / 单词说得好！', false).then(() => {
+        void playRewardDing();
+        showVolumePrompt();
+      });
       return;
     }
 
@@ -797,7 +835,67 @@ function MovingNature() {
       'A big gust! / 大风吹走了树叶和云',
     ][level];
     const spokenFeedback = `${levelMessage} · Heard “${transcript.trim()}”`;
-    void activateWord('blow', strength, spokenFeedback, false);
+    void activateWord('blow', strength, spokenFeedback, false).then(() => {
+      const animationDuration = strength >= 0.85 ? 3600 : 2600;
+      if (reflectionTimeoutRef.current !== null) window.clearTimeout(reflectionTimeoutRef.current);
+      reflectionTimeoutRef.current = window.setTimeout(() => {
+        reflectionTimeoutRef.current = null;
+        setShowReflectionDialog(true);
+      }, animationDuration);
+    });
+  };
+
+  const askReflection = async (answer: string) => {
+    const trimmed = answer.trim();
+    if (!trimmed) return;
+    setReflectionAnswer(trimmed);
+    setReflectionReply('Thinking of a warm answer… / 我正在想一个温暖的回答……');
+    try {
+      const response = await fetch('/api/nature/reflection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answer: trimmed }),
+      });
+      if (!response.ok) throw new Error(`Reflection request failed with ${response.status}`);
+      const data = await response.json() as { reply?: string };
+      setReflectionReply(data.reply || 'That is a lovely idea! The wind gave the clouds and leaves a little push. / 这是个可爱的想法！风给了云和树叶一点点推力。');
+    } catch (error) {
+      console.error('Unable to get the nature reflection:', error);
+      setReflectionReply('That is a lovely idea! The wind gave the clouds and leaves a little push. / 这是个可爱的想法！风给了云和树叶一点点推力。');
+    }
+  };
+
+  const listenForReflection = () => {
+    const speechWindow = window as Window & {
+      SpeechRecognition?: SpeechConstructor;
+      webkitSpeechRecognition?: SpeechConstructor;
+    };
+    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!Recognition || isAnswering) return;
+    const recognition = new Recognition();
+    recognition.lang = 'zh-CN';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    setIsAnswering(true);
+    recognition.onresult = (event) => {
+      const answer = Array.from(
+        { length: event.results.length },
+        (_, index) => event.results[index]?.[0]?.transcript ?? '',
+      ).join(' ');
+      void askReflection(answer);
+    };
+    recognition.onerror = (event) => {
+      console.error('Reflection voice recognition failed:', event.error);
+      setReflectionReply('I could not hear you yet. You can try again or type your answer. / 我还没听清，你可以再试一次，或者输入答案。');
+      setIsAnswering(false);
+    };
+    recognition.onend = () => setIsAnswering(false);
+    try {
+      recognition.start();
+    } catch (error) {
+      console.error('Unable to start reflection voice recognition:', error);
+      setIsAnswering(false);
+    }
   };
 
   const startMicrophoneMeter = async () => {
@@ -966,6 +1064,10 @@ function MovingNature() {
     setStars(0);
     setFlowStep('single-word');
     setShowVolumeToast(false);
+    setShowReflectionDialog(false);
+    setReflectionAnswer('');
+    setReflectionReply('');
+    setStarBurst(false);
     setStatus('Fresh garden! Say one word to begin. / 花园重新开始！先说一个单词。');
     setAction((current) => ({ word: null, id: current.id + 1, strength: 0 }));
   };
@@ -1024,6 +1126,50 @@ function MovingNature() {
           </DialogDescription>
         </DialogContent>
       </Dialog>
+      <Dialog open={showReflectionDialog} onOpenChange={setShowReflectionDialog}>
+        <DialogContent className="max-w-md rounded-[24px] border-2 border-secondary bg-card p-7 sm:p-8">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black tracking-[-.04em]">
+              Why did the clouds and tree move?<br />为什么云和树都动了呢？
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-sm font-semibold leading-relaxed">
+              Tell me in English or Chinese. / 可以用中文或英文告诉我。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 flex gap-2">
+            <input
+              value={reflectionAnswer}
+              onChange={(event) => setReflectionAnswer(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void askReflection(reflectionAnswer);
+              }}
+              placeholder="The wind pushed them... / 因为风吹动了它们……"
+              className="min-h-11 min-w-0 flex-1 rounded-full border-2 border-border bg-background px-4 text-sm font-semibold outline-none focus:border-primary"
+              aria-label="Your answer"
+            />
+            <button
+              type="button"
+              onClick={() => void askReflection(reflectionAnswer)}
+              className="min-h-11 rounded-full bg-primary px-4 text-sm font-black text-primary-foreground"
+            >
+              Send
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={listenForReflection}
+            disabled={isAnswering}
+            className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-border bg-muted px-4 text-sm font-black transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+          >
+            <Mic size={17} /> {isAnswering ? 'Listening… / 正在听…' : 'Answer by voice / 用声音回答'}
+          </button>
+          {reflectionReply && (
+            <p className="mt-4 rounded-[16px] bg-secondary/15 p-4 text-sm font-bold leading-relaxed" role="status">
+              {reflectionReply}
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
       <div className="mx-auto flex min-h-[100dvh] max-w-[1320px] flex-col px-4 pb-8 sm:px-7 lg:px-10">
         <header className="flex items-center justify-between py-5 sm:py-7">
           <Link href="/" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold transition-transform hover:-translate-y-0.5">
@@ -1069,6 +1215,11 @@ function MovingNature() {
                 <Sparkles size={14} /> {stars}
               </div>
             </div>
+            {starBurst && (
+              <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center" aria-label="Star reward" data-testid="nature-star-reward">
+                <div className="animate-bounce text-7xl drop-shadow-[0_6px_0_rgba(0,0,0,.15)]">⭐</div>
+              </div>
+            )}
             {activeWord && (
               <div className="absolute right-5 top-14 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-primary scribble-border backdrop-blur-sm" data-testid="text-wind-strength">
                 {action.strength < 0.4 ? 'soft breeze / 微风' : action.strength < 0.85 ? 'breezy / 轻风' : 'strong gust / 大风'}
