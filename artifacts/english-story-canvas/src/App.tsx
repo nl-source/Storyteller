@@ -933,6 +933,8 @@ function MovingNature() {
     recognitionRef.current = null;
     stopMicrophoneMeter();
     window.speechSynthesis?.cancel();
+    void audioContextRef.current?.close();
+    audioContextRef.current = null;
     if (sequenceTimeoutRef.current !== null) window.clearTimeout(sequenceTimeoutRef.current);
     if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current);
     sequenceTimeoutRef.current = null;
