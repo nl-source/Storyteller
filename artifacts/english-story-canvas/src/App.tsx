@@ -616,6 +616,7 @@ function MovingNature() {
   const [showReflectionDialog, setShowReflectionDialog] = useState(false);
   const [reflectionAnswer, setReflectionAnswer] = useState('');
   const [reflectionReply, setReflectionReply] = useState('');
+  const [isReplySpeaking, setIsReplySpeaking] = useState(false);
   const [isAnswering, setIsAnswering] = useState(false);
   const [starBurst, setStarBurst] = useState(false);
   const [stars, setStars] = useState(0);
@@ -687,6 +688,31 @@ function MovingNature() {
       console.error('Unable to speak the selected word:', error);
       return false;
     }
+  };
+
+  const speakReflectionReply = (reply: string) => {
+    if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      setStatus('Voice reply is not supported in this browser. / 此浏览器不支持语音回复。');
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const chunks = reply.match(/[^.!?。！？]+[.!?。！？]*/g) ?? [reply];
+    const utterances = chunks.filter(Boolean).map((chunk) => {
+      const utterance = new SpeechSynthesisUtterance(chunk.trim());
+      utterance.lang = /[\u3400-\u9fff]/.test(chunk) ? 'zh-CN' : 'en-US';
+      utterance.rate = 0.88;
+      utterance.pitch = 1.08;
+      return utterance;
+    });
+    if (utterances.length === 0) return;
+    setIsReplySpeaking(true);
+    utterances.forEach((utterance, index) => {
+      utterance.onend = () => {
+        if (index === utterances.length - 1) setIsReplySpeaking(false);
+      };
+      utterance.onerror = () => setIsReplySpeaking(false);
+      window.speechSynthesis.speak(utterance);
+    });
   };
 
   const playWindSound = async (strength = 0.65) => {
@@ -858,10 +884,14 @@ function MovingNature() {
       });
       if (!response.ok) throw new Error(`Reflection request failed with ${response.status}`);
       const data = await response.json() as { reply?: string };
-      setReflectionReply(data.reply || 'That is a lovely idea! The wind gave the clouds and leaves a little push. / 这是个可爱的想法！风给了云和树叶一点点推力。');
+      const reply = data.reply || 'That is a lovely idea! The wind gave the clouds and leaves a little push. / 这是个可爱的想法！风给了云和树叶一点点推力。';
+      setReflectionReply(reply);
+      speakReflectionReply(reply);
     } catch (error) {
       console.error('Unable to get the nature reflection:', error);
-      setReflectionReply('That is a lovely idea! The wind gave the clouds and leaves a little push. / 这是个可爱的想法！风给了云和树叶一点点推力。');
+      const reply = 'That is a lovely idea! The wind gave the clouds and leaves a little push. / 这是个可爱的想法！风给了云和树叶一点点推力。';
+      setReflectionReply(reply);
+      speakReflectionReply(reply);
     }
   };
 
@@ -1067,6 +1097,7 @@ function MovingNature() {
     setShowReflectionDialog(false);
     setReflectionAnswer('');
     setReflectionReply('');
+    setIsReplySpeaking(false);
     setStarBurst(false);
     setStatus('Fresh garden! Say one word to begin. / 花园重新开始！先说一个单词。');
     setAction((current) => ({ word: null, id: current.id + 1, strength: 0 }));
@@ -1164,9 +1195,16 @@ function MovingNature() {
             <Mic size={17} /> {isAnswering ? 'Listening… / 正在听…' : 'Answer by voice / 用声音回答'}
           </button>
           {reflectionReply && (
-            <p className="mt-4 rounded-[16px] bg-secondary/15 p-4 text-sm font-bold leading-relaxed" role="status">
-              {reflectionReply}
-            </p>
+            <div className="mt-4 rounded-[16px] bg-secondary/15 p-4" role="status">
+              <p className="text-sm font-bold leading-relaxed">{reflectionReply}</p>
+              <button
+                type="button"
+                onClick={() => speakReflectionReply(reflectionReply)}
+                className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-full bg-card px-3 text-xs font-black"
+              >
+                <Volume2 size={14} /> {isReplySpeaking ? 'Speaking… / 正在说…' : 'Hear reply / 听回复'}
+              </button>
+            </div>
           )}
         </DialogContent>
       </Dialog>
