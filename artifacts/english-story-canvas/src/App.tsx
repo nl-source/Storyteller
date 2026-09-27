@@ -31,6 +31,13 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const queryClient = new QueryClient();
 
@@ -390,7 +397,7 @@ function Landing() {
 }
 
 type NatureWord = 'wind' | 'blow';
-type NatureAction = { word: NatureWord; id: number };
+type NatureAction = { word: NatureWord; id: number; strength: number };
 
 function NatureCanvas({ action }: { action: NatureAction }) {
   const holderRef = useRef<HTMLDivElement>(null);
@@ -405,6 +412,9 @@ function NatureCanvas({ action }: { action: NatureAction }) {
       let previousActionId = actionRef.current.id;
       let actionStartFrame = 0;
       let actionWord: NatureWord | null = null;
+      let actionStrength = 0.65;
+      let leavesBlownAway = false;
+      let cloudsBlownAway = false;
 
       canvas.setup = () => {
         const box = holderRef.current?.getBoundingClientRect();
@@ -429,18 +439,32 @@ function NatureCanvas({ action }: { action: NatureAction }) {
           previousActionId = latestAction.id;
           actionStartFrame = canvas.frameCount;
           actionWord = latestAction.word;
+          actionStrength = latestAction.strength;
+          leavesBlownAway = false;
+          cloudsBlownAway = false;
         }
 
         const elapsed = actionWord ? canvas.frameCount - actionStartFrame : Infinity;
-        const duration = actionWord === 'blow' ? 105 : 75;
+        const duration = (actionWord === 'blow' ? 105 : 75) * (0.7 + actionStrength * 0.6);
         const progress = Math.max(0, 1 - elapsed / duration);
+        const blowProgress = Math.min(1, elapsed / duration);
         const gust = progress * progress;
         const isBlowing = actionWord === 'blow' && progress > 0;
         const isWindy = actionWord === 'wind' && progress > 0;
+        if (actionWord === 'blow' && actionStrength >= 0.85 && blowProgress >= 0.82) {
+          leavesBlownAway = true;
+          cloudsBlownAway = true;
+        }
         const treeSway = isBlowing
-          ? Math.sin(elapsed * 0.2) * 0.13 * gust
+          ? Math.sin(elapsed * (0.13 + actionStrength * 0.12)) * (0.025 + actionStrength * 0.2) * gust
           : Math.sin(canvas.frameCount * 0.018) * 0.012;
-        const cloudShift = isBlowing ? Math.sin(progress * Math.PI) * w * 0.11 : 0;
+        const cloudShift = isBlowing
+          ? actionStrength >= 0.85
+            ? blowProgress * w * 1.15
+            : Math.sin(elapsed * (0.06 + actionStrength * 0.12)) * w * 0.06 * actionStrength
+          : isWindy
+            ? Math.sin(elapsed * 0.11) * w * 0.018 * actionStrength
+            : 0;
 
         canvas.background('#bde8ef');
         canvas.noStroke();
@@ -459,8 +483,10 @@ function NatureCanvas({ action }: { action: NatureAction }) {
           canvas.pop();
         };
 
-        drawCloud(w * 0.22 + cloudShift, h * 0.22, 0.9);
-        drawCloud(w * 0.72 + cloudShift * 0.72, h * 0.16, 0.68);
+        if (!cloudsBlownAway) {
+          drawCloud(w * 0.22 + cloudShift, h * 0.22, 0.9);
+          drawCloud(w * 0.72 + cloudShift * 0.72, h * 0.16, 0.68);
+        }
 
         canvas.fill('#a4d989');
         canvas.ellipse(w * 0.22, h * 0.79, w * 0.75, h * 0.53);
@@ -487,17 +513,25 @@ function NatureCanvas({ action }: { action: NatureAction }) {
         canvas.vertex(17, h * 0.18);
         canvas.endShape(canvas.CLOSE);
 
-        const canopy = [
-          [-35, -h * 0.48, 76, 72, '#3caa70'],
-          [12, -h * 0.55, 88, 85, '#36a96d'],
-          [53, -h * 0.45, 72, 68, '#48b876'],
-          [-5, -h * 0.39, 86, 72, '#4cbb78'],
-          [30, -h * 0.34, 65, 60, '#2f9d65'],
-        ] as const;
-        canopy.forEach(([x, y, width, height, color]) => {
-          canvas.fill(color);
-          canvas.ellipse(x, y, width, height);
-        });
+        if (!leavesBlownAway) {
+          const canopyFade = actionWord === 'blow' && actionStrength >= 0.85
+            ? Math.max(0, 1 - Math.max(0, (blowProgress - 0.5) / 0.32))
+            : 1;
+          canvas.push();
+          canvas.drawingContext.globalAlpha = canopyFade;
+          const canopy = [
+            [-35, -h * 0.48, 76, 72, '#3caa70'],
+            [12, -h * 0.55, 88, 85, '#36a96d'],
+            [53, -h * 0.45, 72, 68, '#48b876'],
+            [-5, -h * 0.39, 86, 72, '#4cbb78'],
+            [30, -h * 0.34, 65, 60, '#2f9d65'],
+          ] as const;
+          canopy.forEach(([x, y, width, height, color]) => {
+            canvas.fill(color);
+            canvas.ellipse(x, y, width, height);
+          });
+          canvas.pop();
+        }
         canvas.pop();
 
         canvas.fill('#fff3a0');
@@ -505,12 +539,13 @@ function NatureCanvas({ action }: { action: NatureAction }) {
         canvas.fill('#fff8c8');
         canvas.circle(w * 0.13, h * 0.16, 33);
 
-        const leafCount = isBlowing ? 9 : isWindy ? 5 : 0;
+        const leafCount = leavesBlownAway ? 0 : isBlowing ? Math.ceil(1 + actionStrength * 8) : isWindy ? Math.ceil(1 + actionStrength * 4) : 0;
         for (let index = 0; index < leafCount; index += 1) {
           const seed = index * 1.7;
-          const travel = ((elapsed * (isBlowing ? 3.1 : 2.2) + index * 47) % (w * 0.55));
-          const leafX = w * 0.7 - travel;
-          const leafY = h * (0.4 + ((Math.sin(seed + elapsed * 0.08) + 1) * 0.16));
+          const leafSpeed = isBlowing ? 0.45 + actionStrength * actionStrength * 4.5 : 0.35 + actionStrength * 1.3;
+          const travel = elapsed * leafSpeed + index * 47;
+          const leafX = w * 0.72 + travel;
+          const leafY = h * (0.24 + ((Math.sin(seed + elapsed * 0.08) + 1) * 0.1));
           canvas.push();
           canvas.translate(leafX, leafY);
           canvas.rotate(Math.sin(elapsed * 0.12 + seed) * 0.8);
@@ -522,11 +557,11 @@ function NatureCanvas({ action }: { action: NatureAction }) {
         if (isWindy || isBlowing) {
           const streakCount = isBlowing ? 8 : 5;
           for (let index = 0; index < streakCount; index += 1) {
-            const travel = (elapsed * (isBlowing ? 5 : 3.4) + index * (w / streakCount)) % (w + 100);
+            const travel = (elapsed * (isBlowing ? 3 + actionStrength * 6 : 2 + actionStrength * 4) + index * (w / streakCount)) % (w + 100);
             const lineY = h * (0.29 + (index % 4) * 0.105);
-            const lineLength = isBlowing ? 58 : 39;
+            const lineLength = isBlowing ? 38 + actionStrength * 44 : 28 + actionStrength * 24;
             canvas.push();
-            canvas.drawingContext.globalAlpha = progress * 0.68;
+            canvas.drawingContext.globalAlpha = progress * (0.25 + actionStrength * 0.55);
             canvas.noFill();
             canvas.stroke(isBlowing ? '#fffdf3' : '#f8fff3');
             canvas.strokeWeight(isBlowing ? 3 : 2);
@@ -540,7 +575,10 @@ function NatureCanvas({ action }: { action: NatureAction }) {
         canvas.textAlign(canvas.CENTER, canvas.CENTER);
         canvas.textStyle(canvas.BOLD);
         canvas.textSize(14);
-        if (isBlowing) canvas.text('whoooosh!', w * 0.5, h * 0.91);
+        if (actionWord === 'blow' && actionStrength >= 0.85 && leavesBlownAway) {
+          canvas.textSize(11);
+          canvas.text('the wind swept everything away!', w * 0.5, h * 0.91);
+        } else if (isBlowing) canvas.text('whoooosh!', w * 0.5, h * 0.91);
         else if (isWindy) canvas.text('a little wind!', w * 0.5, h * 0.91);
       };
     };
@@ -561,12 +599,45 @@ function NatureCanvas({ action }: { action: NatureAction }) {
 }
 
 function MovingNature() {
-  const [action, setAction] = useState<NatureAction>({ word: 'wind', id: 0 });
+  const [action, setAction] = useState<NatureAction>({ word: 'wind', id: 0, strength: 0.65 });
   const [activeWord, setActiveWord] = useState<NatureWord | null>(null);
   const [status, setStatus] = useState('Tap a word to hear it and make the garden move.');
+  const [isHoldingMic, setIsHoldingMic] = useState(false);
+  const [showVolumeGuide, setShowVolumeGuide] = useState(true);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const recognitionRef = useRef<SpeechLike | null>(null);
+  const pressActiveRef = useRef(false);
+  const ignoreRecognitionEndRef = useRef(false);
+  const transcriptRef = useRef('');
+  const peakVolumeRef = useRef(0);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const meterFrameRef = useRef<number | null>(null);
+  const sequenceTimeoutRef = useRef<number | null>(null);
+
+  const stopMicrophoneMeter = () => {
+    if (meterFrameRef.current !== null) {
+      cancelAnimationFrame(meterFrameRef.current);
+      meterFrameRef.current = null;
+    }
+    micSourceRef.current?.disconnect();
+    micSourceRef.current = null;
+    analyserRef.current = null;
+    micStreamRef.current?.getTracks().forEach((track) => track.stop());
+    micStreamRef.current = null;
+  };
 
   useEffect(() => () => {
+    pressActiveRef.current = false;
+    ignoreRecognitionEndRef.current = true;
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    if (sequenceTimeoutRef.current !== null) {
+      window.clearTimeout(sequenceTimeoutRef.current);
+      sequenceTimeoutRef.current = null;
+    }
+    stopMicrophoneMeter();
     void audioContextRef.current?.close();
     audioContextRef.current = null;
   }, []);
@@ -589,7 +660,7 @@ function MovingNature() {
     }
   };
 
-  const playWindSound = async () => {
+  const playWindSound = async (strength = 0.65) => {
     const AudioContextConstructor =
       window.AudioContext ||
       (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -617,7 +688,7 @@ function MovingNature() {
     filter.frequency.setValueAtTime(850, now);
     filter.frequency.exponentialRampToValueAtTime(260, now + duration);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.22, now + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.22 * (0.2 + strength * 0.8), now + 0.12);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     source.connect(filter);
     filter.connect(gain);
@@ -627,28 +698,212 @@ function MovingNature() {
     return true;
   };
 
-  const activateWord = async (word: NatureWord) => {
+  const activateWord = async (word: NatureWord, strength = 0.65, spokenFeedback?: string) => {
+    if (sequenceTimeoutRef.current !== null) {
+      window.clearTimeout(sequenceTimeoutRef.current);
+      sequenceTimeoutRef.current = null;
+    }
     setActiveWord(word);
-    setAction((current) => ({ word, id: current.id + 1 }));
+    setAction((current) => ({ word, id: current.id + 1, strength }));
     const voiceAvailable = playPronunciation(word);
     if (word === 'blow') {
       try {
-        const soundAvailable = await playWindSound();
+        const soundAvailable = await playWindSound(strength);
         const speechStatus = voiceAvailable ? '“Blow!”' : 'Spoken pronunciation is not supported in this browser.';
         const soundStatus = soundAvailable
           ? 'The clouds drift, the tree sways, and the wind goes whoooosh.'
           : 'The garden moves, but wind sound is not supported in this browser.';
-        setStatus(`${speechStatus} ${soundStatus}`);
+        setStatus(`${spokenFeedback ? `${spokenFeedback} · ` : ''}${speechStatus} ${soundStatus}`);
       } catch (error) {
         console.error('Unable to play the wind sound:', error);
-        setStatus(`${voiceAvailable ? '“Blow!”' : 'Spoken pronunciation is not supported in this browser.'} The garden moved, but the wind sound could not be played.`);
+        setStatus(`${spokenFeedback ? `${spokenFeedback} · ` : ''}${voiceAvailable ? '“Blow!”' : 'Spoken pronunciation is not supported in this browser.'} The garden moved, but the wind sound could not be played.`);
       }
     } else {
       setStatus(voiceAvailable
-        ? '“Wind!” A gentle gust sweeps across the garden.'
-        : 'A gentle gust sweeps across the garden. Spoken pronunciation is not supported in this browser.');
+        ? `${spokenFeedback ? `${spokenFeedback} · ` : ''}“Wind!” A gentle gust sweeps across the garden.`
+        : `${spokenFeedback ? `${spokenFeedback} · ` : ''}A gentle gust sweeps across the garden. Spoken pronunciation is not supported in this browser.`);
     }
   };
+
+  const finishSpokenWords = () => {
+    const transcript = transcriptRef.current.toLowerCase();
+    const spokeWind = /\bwind\b/.test(transcript);
+    const spokeBlow = /\bblow\b/.test(transcript);
+    if (!spokeWind && !spokeBlow) {
+      setStatus('I didn’t catch “wind” or “blow”. Try again. / 没听清，请再试一次。');
+      return;
+    }
+
+    const peak = peakVolumeRef.current;
+    const level = peak < 0.035 ? 0 : peak < 0.085 ? 1 : 2;
+    const strength = [0.2, 0.58, 1][level];
+    const levelMessage = [
+      'A little breeze / 微风轻轻吹',
+      'A breezy gust / 微风摇动树叶',
+      'A big gust! / 大风吹走了树叶和云',
+    ][level];
+    const spokenFeedback = `${levelMessage} · Heard “${transcript.trim()}”`;
+    if (spokeWind && spokeBlow) {
+      void activateWord('wind', strength, spokenFeedback);
+      sequenceTimeoutRef.current = window.setTimeout(() => {
+        sequenceTimeoutRef.current = null;
+        void activateWord('blow', strength, spokenFeedback);
+      }, 900);
+      return;
+    }
+    void activateWord(spokeBlow ? 'blow' : 'wind', strength, spokenFeedback);
+  };
+
+  const startMicrophoneMeter = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Microphone access is not available in this browser.');
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!pressActiveRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+
+    const AudioContextConstructor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error('Microphone volume measurement is not supported.');
+    }
+
+    const audioContext = audioContextRef.current ?? new AudioContextConstructor();
+    audioContextRef.current = audioContext;
+    if (audioContext.state === 'suspended') await audioContext.resume();
+    if (!pressActiveRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    micStreamRef.current = stream;
+    micSourceRef.current = source;
+    analyserRef.current = analyser;
+    const samples = new Float32Array(analyser.fftSize);
+
+    const sampleVolume = () => {
+      if (!pressActiveRef.current || !analyserRef.current) return;
+      analyserRef.current.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) sum += sample * sample;
+      peakVolumeRef.current = Math.max(peakVolumeRef.current, Math.sqrt(sum / samples.length));
+      meterFrameRef.current = requestAnimationFrame(sampleVolume);
+    };
+    sampleVolume();
+  };
+
+  const startSpeaking = async () => {
+    if (pressActiveRef.current) return;
+    const speechWindow = window as Window & {
+      SpeechRecognition?: SpeechConstructor;
+      webkitSpeechRecognition?: SpeechConstructor;
+    };
+    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setStatus('Speech recognition is not supported here. Tap the wind or blow cards instead. / 此浏览器不支持语音识别，请点选单词卡。');
+      return;
+    }
+
+    pressActiveRef.current = true;
+    if (sequenceTimeoutRef.current !== null) {
+      window.clearTimeout(sequenceTimeoutRef.current);
+      sequenceTimeoutRef.current = null;
+    }
+    ignoreRecognitionEndRef.current = false;
+    transcriptRef.current = '';
+    peakVolumeRef.current = 0;
+    setIsHoldingMic(true);
+    setStatus('Listening… say “wind”, then “blow”. / 正在听，请分别说 wind 和 blow。');
+
+    const recognition = new Recognition();
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      transcriptRef.current = Array.from(
+        { length: event.results.length },
+        (_, index) => event.results[index]?.[0]?.transcript ?? '',
+      ).join(' ');
+      setStatus(`Listening: ${transcriptRef.current || '…'} / 正在听取语音…`);
+    };
+    recognition.onerror = (event) => {
+      if (!pressActiveRef.current || event.error === 'aborted') return;
+      pressActiveRef.current = false;
+      setIsHoldingMic(false);
+      ignoreRecognitionEndRef.current = true;
+      recognitionRef.current = null;
+      stopMicrophoneMeter();
+      setStatus(event.error === 'not-allowed'
+        ? 'Microphone access is off. Tap a word card instead. / 请允许麦克风权限，或直接点选单词卡。'
+        : 'I couldn’t hear that clearly. Please try again. / 没听清，请再试一次。');
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      if (ignoreRecognitionEndRef.current) {
+        ignoreRecognitionEndRef.current = false;
+        return;
+      }
+      if (pressActiveRef.current) {
+        try {
+          recognition.start();
+          recognitionRef.current = recognition;
+          return;
+        } catch (error) {
+          console.error('Unable to restart speech recognition:', error);
+          pressActiveRef.current = false;
+          setIsHoldingMic(false);
+          stopMicrophoneMeter();
+          setStatus('Speech recognition stopped. Please try again. / 语音识别已停止，请再试一次。');
+          return;
+        }
+      }
+      stopMicrophoneMeter();
+      finishSpokenWords();
+    };
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+      await startMicrophoneMeter();
+    } catch (error) {
+      console.error('Unable to start microphone input:', error);
+      pressActiveRef.current = false;
+      setIsHoldingMic(false);
+      ignoreRecognitionEndRef.current = true;
+      try {
+        recognition.stop();
+      } catch (stopError) {
+        console.error('Unable to stop speech recognition after microphone setup failed:', stopError);
+      }
+      recognitionRef.current = null;
+      stopMicrophoneMeter();
+      setStatus('Please allow microphone access to try speaking. / 请允许麦克风权限后再试。');
+    }
+  };
+
+  const stopSpeaking = () => {
+    if (!pressActiveRef.current) return;
+    pressActiveRef.current = false;
+    setIsHoldingMic(false);
+    stopMicrophoneMeter();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      setStatus('Finishing… / 正在完成识别…');
+    }
+  };
+
+  const speechWindow = typeof window === 'undefined' ? undefined : window as Window & {
+    SpeechRecognition?: SpeechConstructor;
+    webkitSpeechRecognition?: SpeechConstructor;
+  };
+  const speechSupported = Boolean(speechWindow?.SpeechRecognition || speechWindow?.webkitSpeechRecognition);
 
   const words: Array<{
     word: NatureWord;
@@ -662,6 +917,32 @@ function MovingNature() {
 
   return (
     <main className="story-shell text-foreground">
+      <Dialog open={showVolumeGuide} onOpenChange={setShowVolumeGuide}>
+        <DialogContent className="max-w-md rounded-[24px] border-2 border-border bg-card p-7 sm:p-8">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black tracking-[-.04em]">
+              Try different voices!<br />试试不同的音量！
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-sm font-semibold leading-relaxed">
+              Hold the microphone and say “wind”, then “blow”. Whisper, speak normally, or use a big voice to change the gust.
+              <br />
+              <span className="mt-2 block">按住麦克风，分别说 wind 和 blow。试试小声、平常音量和大声说，看看风会有什么变化。</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 rounded-[16px] bg-muted p-4 text-sm font-bold">
+            <p>🤫 Quiet / 小声 — a tiny breeze / 微风轻轻吹</p>
+            <p>🙂 Medium / 中等 — leaves sway, clouds drift / 树叶摇动，云朵飘动</p>
+            <p>🌬️ Loud / 大声 — leaves and clouds fly away / 树叶和云都被吹走</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowVolumeGuide(false)}
+            className="min-h-11 rounded-full bg-primary px-5 font-black text-primary-foreground transition-transform hover:-translate-y-0.5"
+          >
+            Let’s try! / 开始试试
+          </button>
+        </DialogContent>
+      </Dialog>
       <div className="mx-auto flex min-h-[100dvh] max-w-[1320px] flex-col px-4 pb-8 sm:px-7 lg:px-10">
         <header className="flex items-center justify-between py-5 sm:py-7">
           <Link href="/" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold transition-transform hover:-translate-y-0.5">
@@ -694,6 +975,11 @@ function MovingNature() {
             <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-secondary scribble-border backdrop-blur-sm">
               <span className="inline-block h-2 w-2 rounded-full bg-secondary" /> living garden
             </div>
+            {activeWord && (
+              <div className="absolute right-5 top-5 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-primary scribble-border backdrop-blur-sm" data-testid="text-wind-strength">
+                {action.strength < 0.4 ? 'soft breeze / 微风' : action.strength < 0.85 ? 'breezy / 轻风' : 'strong gust / 大风'}
+              </div>
+            )}
             <div className="absolute bottom-5 left-5 right-5 flex items-center gap-2 rounded-[14px] bg-card/90 px-3 py-2 text-xs font-bold leading-snug scribble-border backdrop-blur-sm sm:right-auto sm:max-w-[340px]">
               {activeWord === 'blow' ? <Cloud size={16} className="shrink-0 text-secondary" /> : <Wind size={16} className="shrink-0 text-secondary" />}
               <span>{activeWord ? words.find(({ word }) => word === activeWord)?.prompt : 'Choose a word and watch the garden respond.'}</span>
@@ -708,6 +994,52 @@ function MovingNature() {
                 Tap a word to hear its pronunciation and see it come to life.
               </p>
             </div>
+            <button
+              type="button"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                void startSpeaking();
+              }}
+              onPointerUp={stopSpeaking}
+              onPointerCancel={stopSpeaking}
+              onKeyDown={(event) => {
+                if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+                  event.preventDefault();
+                  void startSpeaking();
+                }
+              }}
+              onKeyUp={(event) => {
+                if (event.key === ' ' || event.key === 'Enter') {
+                  event.preventDefault();
+                  stopSpeaking();
+                }
+              }}
+              onBlur={stopSpeaking}
+              onContextMenu={(event) => event.preventDefault()}
+              aria-label={isHoldingMic
+                ? 'Listening. Release when you finish saying wind and blow.'
+                : 'Hold to say wind and blow'}
+              aria-pressed={isHoldingMic}
+              data-testid="button-hold-to-speak-nature"
+              className={`flex min-h-[78px] w-full touch-none items-center justify-between rounded-[20px] px-5 text-left text-base font-black text-sidebar-primary-foreground transition-transform active:scale-[.99] ${isHoldingMic ? 'bg-primary listen-ring' : 'bg-secondary hover:-translate-y-0.5'}`}
+            >
+              <span className="flex items-center gap-3">
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-white/20">
+                  {isHoldingMic ? <Waves size={22} /> : <Mic size={22} />}
+                </span>
+                <span>
+                  <span className="block">{isHoldingMic ? 'Listening… / 正在听…' : 'Hold to speak / 按住说话'}</span>
+                  <span className="mt-1 block text-xs font-bold opacity-80">“wind”… “blow”</span>
+                </span>
+              </span>
+              {isHoldingMic ? <MicOff size={20} /> : <Volume2 size={20} />}
+            </button>
+            {!speechSupported && (
+              <p className="text-xs font-semibold leading-relaxed text-muted-foreground" role="status">
+                Voice recognition is unavailable; tap either word card instead. / 暂不支持语音识别，请点击下方单词卡。
+              </p>
+            )}
             {words.map(({ word, pronunciation, meaning, prompt }) => {
               const isBlow = word === 'blow';
               const selected = activeWord === word;
@@ -745,7 +1077,7 @@ function MovingNature() {
 
         <footer className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground">
           <p className="flex items-center gap-2"><Headphones size={14} /> Listen to each word, then try saying it aloud.</p>
-          <p className="flex items-center gap-2"><Info size={14} /> Voice and sound start when you tap a word.</p>
+          <p className="flex items-center gap-2"><Info size={14} /> Hold the mic or tap a word / 按住麦克风或点选单词</p>
         </footer>
       </div>
     </main>
