@@ -974,7 +974,7 @@ function MovingNature() {
     if (chatMessages.length === 0) {
       const greeting = 'Hi, little explorer! Tell me what you noticed in the garden. / 你好，小小探索家！告诉我你在花园里发现了什么吧。';
       setChatMessages([{ role: 'bot', text: greeting }]);
-      speakReflectionReply(greeting, () => window.setTimeout(startBotListening, 250));
+      window.setTimeout(startBotListening, 250);
     } else {
       startBotListening();
     }
