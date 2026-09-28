@@ -8,10 +8,12 @@ import p5 from 'p5';
 import {
   ArrowRight,
   ArrowDown,
+  Bird,
   Bot,
   BookOpen,
   Check,
   Cloud,
+  CloudRain,
   CircleHelp,
   Eraser,
   Flower2,
@@ -24,6 +26,7 @@ import {
   PhoneOff,
   RotateCcw,
   Sparkles,
+  Sun,
   Volume2,
   Waves,
   Wind,
@@ -392,9 +395,184 @@ function Landing() {
           <div className="mt-12 grid gap-4 sm:grid-cols-2">
             <ChapterCard number="01" eyebrow="make a story" title="Your voice draws the world." description="Build a silly English story with a hand-painted tree, a bee, and an apple that waits for its cue." href="/story" tone="green" />
             <ChapterCard number="02" eyebrow="moving nature" title="Everything moves in nature!" description="Tap wind and blow to hear English words and send a gust through the garden." href="/moving-nature" tone="orange" />
+            <ChapterCard number="03" eyebrow="four little scenes" title="Touch a tiny world." description="Explore four separate picture windows. Each canvas has its own surprise waiting for your tap." href="/session-3" tone="green" />
           </div>
         </section>
-        <footer className="flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>chapters 01 &amp; 02 are ready to play</span><span>Play with a friend<br />和朋友一起玩</span></footer>
+        <footer className="flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>chapters 01, 02 &amp; 03 are ready to play</span><span>Play with a friend<br />和朋友一起玩</span></footer>
+      </div>
+    </main>
+  );
+}
+
+type SceneKind = 'sun' | 'rain' | 'bird' | 'flower';
+
+const sessionThreeScenes: Array<{
+  kind: SceneKind;
+  title: string;
+  subtitle: string;
+  prompt: string;
+  icon: typeof Sun;
+}> = [
+  { kind: 'sun', title: 'Sun & cloud', subtitle: '太阳和云', prompt: 'Tap to move the cloud', icon: Sun },
+  { kind: 'rain', title: 'Rain garden', subtitle: '雨中花园', prompt: 'Tap for a little rain', icon: CloudRain },
+  { kind: 'bird', title: 'Little bird', subtitle: '小鸟飞飞', prompt: 'Tap to make it fly', icon: Bird },
+  { kind: 'flower', title: 'Growing flower', subtitle: '花朵长大', prompt: 'Tap to help it bloom', icon: Flower2 },
+];
+
+function SceneCanvas({ kind, action }: { kind: SceneKind; action: number }) {
+  const holderRef = useRef<HTMLDivElement>(null);
+  const actionRef = useRef(action);
+  actionRef.current = action;
+
+  useEffect(() => {
+    if (!holderRef.current) return;
+    const sketch = (canvas: p5) => {
+      let w = 360;
+      let h = 230;
+      let previousAction = actionRef.current;
+      let actionStart = 0;
+
+      canvas.setup = () => {
+        const box = holderRef.current?.getBoundingClientRect();
+        w = Math.max(240, Math.floor(box?.width ?? 360));
+        h = Math.max(180, Math.min(250, Math.floor(w * 0.62)));
+        canvas.createCanvas(w, h).parent(holderRef.current as HTMLElement);
+        canvas.frameRate(30);
+      };
+
+      canvas.windowResized = () => {
+        const box = holderRef.current?.getBoundingClientRect();
+        if (box) {
+          w = Math.max(240, Math.floor(box.width));
+          h = Math.max(180, Math.min(250, Math.floor(w * 0.62)));
+          canvas.resizeCanvas(w, h);
+        }
+      };
+
+      canvas.draw = () => {
+        if (actionRef.current !== previousAction) {
+          previousAction = actionRef.current;
+          actionStart = canvas.frameCount;
+        }
+        const elapsed = canvas.frameCount - actionStart;
+        const progress = Math.min(1, elapsed / 35);
+        const ease = 1 - Math.pow(1 - progress, 3);
+        canvas.background(kind === 'rain' ? '#b9dce9' : '#c9edf0');
+        canvas.noStroke();
+
+        canvas.fill('#87c978');
+        canvas.ellipse(w * 0.5, h * 1.08, w * 1.25, h * 0.65);
+        canvas.fill('#70b968');
+        canvas.rect(0, h * 0.82, w, h * 0.18);
+
+        if (kind === 'sun') {
+          canvas.fill('#fff0a0');
+          canvas.circle(w * 0.2, h * 0.25, 58);
+          canvas.fill('#fffdf2');
+          canvas.ellipse(w * 0.64 + ease * w * 0.15, h * 0.28, 75, 34);
+          canvas.ellipse(w * 0.72 + ease * w * 0.15, h * 0.24, 62, 42);
+          canvas.fill('#355b54');
+          canvas.textAlign(canvas.CENTER, canvas.CENTER);
+          canvas.textStyle(canvas.BOLD);
+          canvas.textSize(13);
+          canvas.text(action ? 'whoosh!' : 'tap the cloud', w * 0.5, h * 0.92);
+        } else if (kind === 'rain') {
+          canvas.fill('#fffdf2');
+          canvas.ellipse(w * 0.48, h * 0.24, 82, 36);
+          canvas.ellipse(w * 0.58, h * 0.2, 68, 45);
+          if (action) {
+            canvas.stroke('#5da7c7');
+            canvas.strokeWeight(2);
+            for (let index = 0; index < 8; index += 1) {
+              const x = w * 0.27 + index * 18;
+              canvas.line(x, h * 0.4, x - 4, h * (0.62 + Math.sin(elapsed * 0.08 + index) * 0.03));
+            }
+            canvas.noStroke();
+          }
+          canvas.fill('#f2a64a');
+          canvas.ellipse(w * 0.36, h * 0.75, 16, 42);
+          canvas.fill('#e87655');
+          canvas.ellipse(w * 0.48, h * 0.75, 16, 42);
+        } else if (kind === 'bird') {
+          const birdX = w * 0.24 + (action ? ease * w * 0.54 : 0);
+          const birdY = h * 0.35 + Math.sin(elapsed * 0.15) * (action ? 13 : 3);
+          canvas.push();
+          canvas.translate(birdX, birdY);
+          canvas.fill('#f2a64a');
+          canvas.ellipse(0, 0, 34, 23);
+          canvas.fill('#e87655');
+          canvas.triangle(-7, 0, -30, -14, -24, 10);
+          canvas.fill('#243b53');
+          canvas.circle(9, -5, 4);
+          canvas.pop();
+          canvas.fill('#355b54');
+          canvas.textAlign(canvas.CENTER, canvas.CENTER);
+          canvas.textStyle(canvas.BOLD);
+          canvas.textSize(13);
+          canvas.text(action ? 'fly, bird!' : 'tap the bird', w * 0.5, h * 0.92);
+        } else {
+          const bloom = action ? ease : 0.15;
+          canvas.stroke('#4b9c5b');
+          canvas.strokeWeight(5);
+          canvas.line(w * 0.5, h * 0.82, w * 0.5, h * (0.58 - bloom * 0.12));
+          canvas.noStroke();
+          canvas.fill('#f2a64a');
+          canvas.ellipse(w * 0.44, h * 0.7, 28, 14);
+          canvas.ellipse(w * 0.56, h * 0.65, 28, 14);
+          canvas.fill(action ? '#e87655' : '#88b96b');
+          canvas.circle(w * 0.5, h * (0.56 - bloom * 0.12), 30 + bloom * 20);
+          canvas.fill('#355b54');
+          canvas.textAlign(canvas.CENTER, canvas.CENTER);
+          canvas.textStyle(canvas.BOLD);
+          canvas.textSize(13);
+          canvas.text(action ? 'beautiful!' : 'tap the seed', w * 0.5, h * 0.92);
+        }
+      };
+    };
+    const instance = new p5(sketch);
+    return () => instance.remove();
+  }, [kind]);
+
+  return <div ref={holderRef} data-testid={`canvas-session-3-${kind}`} className="h-full w-full overflow-hidden rounded-[20px] [&>canvas]:block" role="img" aria-label={`${kind} interactive canvas`} />;
+}
+
+function SessionThree() {
+  const [actions, setActions] = useState<Record<SceneKind, number>>({ sun: 0, rain: 0, bird: 0, flower: 0 });
+
+  const activateScene = (kind: SceneKind) => {
+    setActions((current) => ({ ...current, [kind]: current[kind] + 1 }));
+  };
+
+  return (
+    <main className="story-shell text-foreground">
+      <div className="mx-auto flex min-h-[100dvh] max-w-[1200px] flex-col px-4 pb-8 sm:px-7 lg:px-10">
+        <header className="flex items-center justify-between py-5 sm:py-7">
+          <Link href="/" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold"><ArrowRight className="rotate-180" size={16} /> Chapters</Link>
+          <div className="text-right">
+            <p className="text-[17px] font-black">Four Little Scenes</p>
+            <p className="mono-label mt-1 text-muted-foreground">chapter 03 · touch & discover</p>
+          </div>
+        </header>
+        <section className="mb-7">
+          <p className="mono-label mb-2 text-primary">03 / four-window story</p>
+          <h1 className="text-[clamp(2.6rem,7vw,5.8rem)] font-black leading-[.9] tracking-[-.08em]">Every window<br /><span className="text-secondary">has a surprise.</span></h1>
+          <p className="mt-4 max-w-[620px] text-base font-semibold leading-relaxed text-muted-foreground">Tap one square at a time. Each little canvas remembers its own action.</p>
+        </section>
+        <section className="grid flex-1 gap-4 sm:grid-cols-2" aria-label="Four interactive story canvases">
+          {sessionThreeScenes.map(({ kind, title, subtitle, prompt, icon: Icon }) => (
+            <article key={kind} className="flex flex-col rounded-[26px] border-2 border-border bg-card p-3 soft-shadow sm:p-4">
+              <div className="mb-3 flex items-start justify-between px-2 pt-1">
+                <div><p className="mono-label text-primary">scene 0{sessionThreeScenes.findIndex((scene) => scene.kind === kind) + 1}</p><h2 className="mt-1 text-xl font-black">{title}</h2><p className="text-xs font-bold text-muted-foreground">{subtitle}</p></div>
+                <Icon size={24} className="text-secondary" />
+              </div>
+              <button type="button" onClick={() => activateScene(kind)} className="group flex flex-1 flex-col text-left" aria-label={prompt} data-testid={`button-session-3-${kind}`}>
+                <div className="min-h-[190px] flex-1 rounded-[20px] bg-muted p-1"><SceneCanvas kind={kind} action={actions[kind]} /></div>
+                <span className="flex items-center justify-between px-2 pt-3 text-xs font-black text-secondary"><span>{prompt}</span><ArrowRight size={15} className="transition-transform group-hover:translate-x-1" /></span>
+              </button>
+            </article>
+          ))}
+        </section>
+        <footer className="mt-7 border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground">Touch, watch, and tell the story. / 点一点、看一看、说说你的故事。</footer>
       </div>
     </main>
   );
@@ -1637,6 +1815,7 @@ function Router() {
         <Route path="/" component={Landing} />
         <Route path="/story" component={Home} />
         <Route path="/moving-nature" component={MovingNature} />
+        <Route path="/session-3" component={SessionThree} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
