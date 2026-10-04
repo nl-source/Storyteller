@@ -27,6 +27,7 @@ import {
   RotateCcw,
   Sparkles,
   Sun,
+  Umbrella,
   Volume2,
   Waves,
   Wind,
@@ -785,6 +786,216 @@ function NatureCanvas({ action }: { action: NatureAction }) {
       role="img"
       aria-label="Garden scene with clouds and a tree that move when you blow"
     />
+  );
+}
+
+function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
+  const holderRef = useRef<HTMLDivElement>(null);
+  const blowingRef = useRef(isBlowing);
+  blowingRef.current = isBlowing;
+
+  useEffect(() => {
+    if (!holderRef.current) return;
+    const sketch = (canvas: p5) => {
+      let width = 620;
+      let height = 430;
+      let gustStart = -1;
+      let wasBlowing = false;
+
+      const resize = () => {
+        const box = holderRef.current?.getBoundingClientRect();
+        width = Math.max(300, Math.floor(box?.width ?? 620));
+        height = Math.max(330, Math.min(470, Math.floor(width * 0.7)));
+        canvas.resizeCanvas(width, height);
+      };
+
+      canvas.setup = () => {
+        const box = holderRef.current?.getBoundingClientRect();
+        width = Math.max(300, Math.floor(box?.width ?? 620));
+        height = Math.max(330, Math.min(470, Math.floor(width * 0.7)));
+        canvas.createCanvas(width, height).parent(holderRef.current as HTMLElement);
+        canvas.frameRate(30);
+      };
+      canvas.windowResized = resize;
+
+      canvas.draw = () => {
+        const blowing = blowingRef.current;
+        if (blowing && !wasBlowing) gustStart = canvas.frameCount;
+        wasBlowing = blowing;
+        const elapsed = gustStart < 0 ? 0 : canvas.frameCount - gustStart;
+        const gust = blowing ? Math.min(1, elapsed / 20) : 0;
+        const sway = blowing ? Math.sin(elapsed * 0.24) * 0.16 * gust : Math.sin(canvas.frameCount * 0.02) * 0.012;
+
+        // A quiet watercolor-paper base keeps the scene readable before it moves.
+        canvas.background('#fffaf0');
+        canvas.noStroke();
+        canvas.fill('#bce8f3');
+        canvas.rect(0, 0, width, height * 0.72);
+        canvas.fill('#e7f6ee');
+        canvas.ellipse(width * 0.22, height * 0.84, width * 0.72, height * 0.39);
+        canvas.fill('#9bd57d');
+        canvas.ellipse(width * 0.78, height * 0.86, width * 0.9, height * 0.44);
+        canvas.fill('#79c66e');
+        canvas.rect(0, height * 0.84, width, height * 0.16);
+
+        canvas.fill('#fff4a1');
+        canvas.circle(width * 0.14, height * 0.16, 52);
+        canvas.fill('#fffbd2');
+        canvas.circle(width * 0.14, height * 0.16, 40);
+
+        const treeX = width * 0.7;
+        const treeY = height * 0.78;
+        canvas.push();
+        canvas.translate(treeX, treeY);
+        canvas.rotate(sway);
+        canvas.fill('#8d5a3a');
+        canvas.beginShape();
+        canvas.vertex(-20, height * 0.14);
+        canvas.vertex(-12, -height * 0.34);
+        canvas.vertex(-48, -height * 0.49);
+        canvas.vertex(-42, -height * 0.54);
+        canvas.vertex(-7, -height * 0.39);
+        canvas.vertex(7, -height * 0.62);
+        canvas.vertex(16, -height * 0.38);
+        canvas.vertex(48, -height * 0.52);
+        canvas.vertex(55, -height * 0.47);
+        canvas.vertex(20, -height * 0.3);
+        canvas.vertex(25, height * 0.14);
+        canvas.endShape(canvas.CLOSE);
+        const canopy = [[-39, -height * 0.54, 92, 83, '#54b878'], [13, -height * 0.61, 108, 96, '#40aa70'], [58, -height * 0.48, 84, 77, '#61bf7c'], [8, -height * 0.4, 114, 81, '#2e9d65']] as const;
+        canopy.forEach(([x, y, w, h, color]) => { canvas.fill(color); canvas.ellipse(x, y, w, h); });
+        // The face appears only during the target sentence, making the response feel earned.
+        if (blowing) {
+          canvas.fill('#253d4d');
+          canvas.circle(8, -height * 0.48, 7);
+          canvas.circle(31, -height * 0.48, 7);
+          canvas.noFill();
+          canvas.stroke('#253d4d');
+          canvas.strokeWeight(3);
+          canvas.arc(20, -height * 0.41, 22, 17, canvas.PI * 1.04, canvas.TWO_PI - 0.1);
+          canvas.noStroke();
+        }
+        canvas.pop();
+
+        if (blowing) {
+          for (let index = 0; index < 7; index += 1) {
+            const x = ((elapsed * 7 + index * width / 6) % (width + 130)) - 70;
+            const y = height * (0.25 + (index % 4) * 0.11);
+            canvas.noFill();
+            canvas.stroke('#fffdf7');
+            canvas.strokeWeight(4);
+            canvas.arc(x, y, 74, 24, canvas.PI * 1.08, canvas.PI * 1.9);
+            canvas.noStroke();
+          }
+          for (let index = 0; index < 10; index += 1) {
+            const x = treeX - 30 + ((elapsed * 4.6 + index * 41) % (width * 0.5));
+            const y = height * (0.35 + ((index * 0.13 + elapsed * 0.015) % 0.35));
+            canvas.push(); canvas.translate(x, y); canvas.rotate(elapsed * 0.16 + index);
+            canvas.fill(index % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 15, 7); canvas.pop();
+          }
+        }
+        canvas.fill('#294b58');
+        canvas.textAlign(canvas.CENTER, canvas.CENTER);
+        canvas.textStyle(canvas.BOLD);
+        canvas.textSize(15);
+        if (blowing) canvas.text('“Oh no, the wind is blowing in my face!”', width * 0.5, height * 0.94);
+      };
+    };
+    const instance = new p5(sketch);
+    return () => instance.remove();
+  }, []);
+
+  return <div ref={holderRef} className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" role="img" aria-label="Watercolor field with an animated tree in the wind" />;
+}
+
+const windWords = [
+  { word: 'Wind', meaning: '风', icon: Wind },
+  { word: 'Blow', meaning: '吹', icon: Wind },
+  { word: 'Umbrella', meaning: '雨伞', icon: Umbrella },
+  { word: 'Tree', meaning: '树', icon: Leaf },
+  { word: 'Fly', meaning: '飞', icon: Bird },
+  { word: 'Softly', meaning: '轻轻地', icon: Cloud },
+  { word: 'Heavily', meaning: '重重地', icon: CloudRain },
+  { word: 'Strongly', meaning: '强烈地', icon: Sparkles },
+] as const;
+
+function WindScene() {
+  const [isBlowing, setIsBlowing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [status, setStatus] = useState('Say: “The wind blows the tree.”');
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  const playScene = () => {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+    setIsBlowing(true);
+    setStatus('Great! The wind blows the tree.');
+    resetTimerRef.current = window.setTimeout(() => setIsBlowing(false), 4700);
+  };
+
+  const listenForSentence = () => {
+    const speechWindow = window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor };
+    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setStatus('Voice recognition is not available here. Use “Play the scene” instead.');
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onstart = () => { setIsListening(true); setStatus('Listening… say “The wind blows the tree.”'); };
+    recognition.onerror = () => { setIsListening(false); setStatus('I could not hear that. Try the sentence again, or play the scene.'); };
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (event) => {
+      const heard = Array.from({ length: event.results.length }, (_, index) => event.results[index]?.[0]?.transcript ?? '').join(' ').toLowerCase();
+      if (/\bwind\b/.test(heard) && /\bblows?\b/.test(heard) && /\btree\b/.test(heard)) playScene();
+      else setStatus(`I heard “${heard}”. Try: “The wind blows the tree.”`);
+    };
+    recognition.start();
+  };
+
+  return (
+    <main className="story-shell text-foreground">
+      <div className="mx-auto flex min-h-[100dvh] max-w-[1280px] flex-col px-4 pb-8 sm:px-8 lg:px-12">
+        <header className="flex items-center justify-between py-5 sm:py-7">
+          <Link href="/" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold"><ArrowRight className="rotate-180" size={16} /> Chapters</Link>
+          <p className="mono-label text-muted-foreground">moving nature · 01 / 04</p>
+        </header>
+        <section className="mb-7 max-w-3xl">
+          <p className="mono-label mb-2 text-secondary">first scene / wind</p>
+          <h1 className="text-[clamp(3rem,8vw,6.4rem)] font-black leading-[.88] tracking-[-.08em]">Can the wind<br /><span className="text-secondary">move the tree?</span></h1>
+          <p className="mt-5 max-w-xl text-base font-semibold leading-relaxed text-muted-foreground">Listen to the words, then say the sentence and watch the little tree react.</p>
+        </section>
+        <section className="grid flex-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="paper-shadow rounded-[28px] bg-[#fff8e8] p-5 sm:p-6">
+            <p className="mono-label text-primary">word garden</p>
+            <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-1">
+              {windWords.map(({ word, meaning, icon: Icon }) => (
+                <button key={word} type="button" onClick={() => {
+                  window.speechSynthesis?.cancel();
+                  const utterance = new SpeechSynthesisUtterance(word); utterance.lang = 'en-US'; utterance.rate = 0.78; window.speechSynthesis?.speak(utterance);
+                  setStatus(`Listen: ${word}.`);
+                }} className="flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm transition-transform hover:-translate-y-0.5">
+                  <span>{word} <span className="ml-1 text-xs text-muted-foreground">{meaning}</span></span><Icon size={16} className="text-secondary" />
+                </button>
+              ))}
+            </div>
+          </aside>
+          <div className="paper-shadow canvas-grid flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4">
+            <div className="relative min-h-[330px] flex-1"><WindCanvas isBlowing={isBlowing} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">watercolor field</span></div>
+            <div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between">
+              <div><p className="font-black">The wind blows the tree.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
+              <div className="flex shrink-0 gap-2"><button type="button" onClick={listenForSentence} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Listening…' : 'Speak'}</button><button type="button" onClick={playScene} className="min-h-11 rounded-full border-2 border-sidebar-foreground/20 bg-card px-4 text-sm font-black text-foreground">Play the scene</button></div>
+            </div>
+          </div>
+        </section>
+        <footer className="mt-7 flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>Wind is the first of four Moving Nature scenes.</span><span>Rain, Snow, and Sunny are coming next.</span></footer>
+      </div>
+    </main>
   );
 }
 
@@ -1814,7 +2025,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/story" component={Home} />
-        <Route path="/moving-nature" component={MovingNature} />
+        <Route path="/moving-nature" component={WindScene} />
         <Route path="/session-3" component={SessionThree} />
         <Route component={NotFound} />
       </Switch>
