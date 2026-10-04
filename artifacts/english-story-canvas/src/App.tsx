@@ -955,6 +955,14 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
             canvas.push(); canvas.translate(x, y); canvas.rotate(elapsed * 0.16 + index);
             canvas.fill(index % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 15, 7); canvas.pop();
           }
+          // When two characters are in the recipe, the little puffs make their conversation visible.
+          if (showUmbrella && hasTree) {
+            for (let puff = 0; puff < 4; puff += 1) {
+              const progress = (puff + ((elapsed * 0.025) % 1)) / 4;
+              canvas.fill('#fffdf7');
+              canvas.circle(width * (0.42 + progress * 0.2), height * (0.48 + Math.sin((elapsed + puff) * 0.25) * 0.025), 9 + puff * 2);
+            }
+          }
         }
         if (tornado) {
           const tornadoX = treeX - Math.min(width * 0.26, elapsed * 4.5);
@@ -1008,7 +1016,9 @@ function WindScene() {
 
   const markWordsPlayed = (phrase: string) => {
     const lowerCasePhrase = phrase.toLowerCase();
-    const foundWords = windWords.filter(({ word }) => new RegExp(`\\b${word}\\b`).test(lowerCasePhrase));
+    const foundWords = windWords.filter(({ word }) => word === 'blow'
+      ? /\bblows?\b/.test(lowerCasePhrase)
+      : new RegExp(`\\b${word}\\b`).test(lowerCasePhrase));
     if (foundWords.length) setPlayedWords((current) => new Set([...current, ...foundWords.map(({ word }) => word)]));
     return foundWords.map(({ word }) => word);
   };
