@@ -1172,11 +1172,32 @@ function WindScene() {
             </div>
           </div>
         </section>
-        <footer className="mt-7 flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>Wind is the first of four Moving Nature scenes.</span><span>Rain, Snow, and Sunny are coming next.</span></footer>
+        <footer className="mt-7 flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>Wind is the first of four Moving Nature scenes.</span><Link href="/moving-nature/rain" className="rounded-full bg-secondary px-4 py-2 font-black text-secondary-foreground">Next: Rain <ArrowRight className="inline" size={14}/></Link></footer>
       </div>
     </main>
   );
 }
+
+const rainWords = [
+  { word: 'rain', type: 'noun', icon: CloudRain }, { word: 'umbrella', type: 'noun', icon: Umbrella }, { word: 'tree', type: 'noun', icon: Leaf }, { word: 'puddle', type: 'noun', icon: Cloud }, { word: 'alice', type: 'noun', icon: Bot },
+  { word: 'fall', type: 'verb', icon: ArrowDown }, { word: 'splash', type: 'verb', icon: Sparkles }, { word: 'softly', type: 'adverb', icon: Cloud }, { word: 'heavily', type: 'adverb', icon: CloudRain },
+] as const;
+
+function RainCanvas({ words }: { words: string[] }) {
+  const holderRef = useRef<HTMLDivElement>(null); const wordsRef = useRef(words); wordsRef.current = words;
+  useEffect(() => { if (!holderRef.current) return; const sketch = (c: p5) => { let w = 620; let h = 430; let rainStart = 0;
+    const size = () => { const box = holderRef.current?.getBoundingClientRect(); w = Math.max(300, Math.floor(box?.width ?? 620)); h = Math.max(330, Math.floor(w * .7)); c.resizeCanvas(w, h); };
+    c.setup = () => { c.createCanvas(w, h).parent(holderRef.current as HTMLElement); size(); c.frameRate(30); }; c.windowResized = size;
+    c.draw = () => { const ws = wordsRef.current; const raining = ws.includes('rain') || ws.includes('fall'); const heavy = ws.includes('heavily'); const umbrella = ws.includes('umbrella'); const alice = ws.includes('alice'); const splash = ws.includes('splash'); if (raining && !rainStart) rainStart = c.frameCount; if (!raining) rainStart = 0; const elapsed = c.frameCount - rainStart;
+      c.background(heavy ? '#8098a5' : '#b9dbe5'); c.noStroke(); c.fill('#8acb72'); c.rect(0,h*.76,w,h*.24); c.fill('#6e9c51'); c.rect(w*.65,h*.35,28,h*.42); c.fill('#4ea96a'); c.ellipse(w*.66,h*.3,140,120);
+      if (raining) { c.stroke(heavy ? '#d7ecf7' : '#eef8fb'); c.strokeWeight(heavy ? 4 : 2); for(let i=0;i<(heavy?75:34);i++){const x=(i*47+elapsed*(heavy?7:2))%w; const y=(i*31+elapsed*(heavy?14:5))%(h*.77); c.line(x,y,x-(heavy?7:3),y+(heavy?22:12));} c.noStroke(); }
+      const puddle = raining && elapsed > 90 || ws.includes('puddle'); if(puddle){c.fill('#4f9fbd'); c.ellipse(w*.43,h*.77,150,31); c.noFill(); c.stroke('#d9f5ff'); c.ellipse(w*.43,h*.77,90+Math.sin(c.frameCount*.2)*18,13); c.noStroke(); if(splash){c.fill('#d9f5ff'); for(let i=0;i<8;i++)c.circle(w*.43+Math.cos(i)*55,h*.71+Math.sin(i)*24,9); c.fill('#fff');c.ellipse(w*.53,h*.61,75,42);c.fill('#225');c.textSize(15);c.textAlign(c.CENTER);c.text('Splash!',w*.53,h*.616);} }
+      if(umbrella){c.stroke('#425f7a');c.strokeWeight(5);c.line(w*.25,h*.56,w*.25,h*.75);c.noStroke();c.fill('#f38f75');c.arc(w*.25,h*.56,105,62,c.PI,c.TWO_PI);c.fill('#ffd76a');c.arc(w*.25,h*.56,34,62,c.PI,c.TWO_PI);}
+      if(alice){const x=w*.35; const jumping=splash&&puddle; c.stroke('#293d4e');c.strokeWeight(4);c.circle(x,h*.64-(jumping?45:0),18);c.line(x,h*.65-(jumping?45:0),x,h*.73-(jumping?45:0));c.line(x,h*.69-(jumping?45:0),x-20,h*.72-(jumping?45:0));c.line(x,h*.69-(jumping?45:0),x+20,h*.72-(jumping?45:0));c.line(x,h*.73-(jumping?45:0),x-14,h*.77);c.line(x,h*.73-(jumping?45:0),x+14,h*.77);c.noStroke();}
+    }; }; const instance = new p5(sketch); return () => instance.remove(); }, []); return <div ref={holderRef} className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" />;
+}
+
+function RainScene() { const [words,setWords]=useState<string[]>([]); const [status,setStatus]=useState('Choose a word to begin the rain.'); const play=(word:string)=>{setWords(current=>[...new Set([...current,word])]);setStatus(`Rain recipe: ${word}.`);}; return <main className="story-shell text-foreground"><div className="mx-auto flex min-h-[100dvh] max-w-[1280px] flex-col px-4 pb-8 sm:px-8 lg:px-12"><header className="flex items-center justify-between py-5 sm:py-7"><Link href="/moving-nature" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold"><ArrowRight className="rotate-180" size={16}/> Wind</Link><p className="mono-label text-muted-foreground">moving nature · 02 / 04</p></header><section className="mb-7"><p className="mono-label mb-2 text-secondary">second scene / rain</p><h1 className="text-[clamp(3rem,8vw,6.4rem)] font-black leading-[.88] tracking-[-.08em]">Your voice<br/><span className="text-secondary">makes rain.</span></h1></section><section className="grid flex-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]"><aside className="paper-shadow rounded-[28px] bg-[#fff8e8] p-5 sm:p-6"><p className="mono-label text-primary">word garden</p><div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-1">{rainWords.map(({word,type,icon:Icon})=><button key={word} onClick={()=>play(word)} className="flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm"><span className="capitalize">{word} <span className={`ml-1 rounded-full px-2 py-.5 text-[10px] ${wordTypeStyles[type]}`}>{type}</span></span><Icon size={16} className="text-secondary"/></button>)}</div></aside><div className="paper-shadow flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4"><div className="relative min-h-[330px] flex-1"><RainCanvas words={words}/><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div><div className="mt-4 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground"><p className="font-black">Make a rainy recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70">{status}</p></div></div></section></div></main>; }
 
 function MovingNature() {
   const [action, setAction] = useState<NatureAction>({ word: null, id: 0, strength: 0 });
@@ -2205,6 +2226,7 @@ function Router() {
         <Route path="/" component={Landing} />
         <Route path="/story" component={Home} />
         <Route path="/moving-nature" component={WindScene} />
+        <Route path="/moving-nature/rain" component={RainScene} />
         <Route path="/session-3" component={SessionThree} />
         <Route component={NotFound} />
       </Switch>
