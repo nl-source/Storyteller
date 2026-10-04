@@ -789,10 +789,14 @@ function NatureCanvas({ action }: { action: NatureAction }) {
   );
 }
 
-function WindCanvas({ activeWords }: { activeWords: string[] }) {
+function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWords: string[]; triggeredWords: string[]; interactionId: number }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const activeWordsRef = useRef(activeWords);
+  const triggeredWordsRef = useRef(triggeredWords);
+  const interactionIdRef = useRef(interactionId);
   activeWordsRef.current = activeWords;
+  triggeredWordsRef.current = triggeredWords;
+  interactionIdRef.current = interactionId;
 
   useEffect(() => {
     if (!holderRef.current) return;
@@ -801,6 +805,8 @@ function WindCanvas({ activeWords }: { activeWords: string[] }) {
       let height = 430;
       let gustStart = -1;
       let wasBlowing = false;
+      let lastInteractionId = interactionId;
+      let nounJiggleStart = -1000;
 
       const resize = () => {
         const box = holderRef.current?.getBoundingClientRect();
@@ -821,12 +827,18 @@ function WindCanvas({ activeWords }: { activeWords: string[] }) {
       canvas.draw = () => {
         const blowing = activeWordsRef.current.includes('wind') || activeWordsRef.current.includes('blow');
         const showUmbrella = activeWordsRef.current.includes('umbrella');
+        if (interactionIdRef.current !== lastInteractionId) {
+          lastInteractionId = interactionIdRef.current;
+          if (triggeredWordsRef.current.some((word) => word === 'tree' || word === 'umbrella')) nounJiggleStart = canvas.frameCount;
+        }
         if (blowing && !wasBlowing) gustStart = canvas.frameCount;
         wasBlowing = blowing;
         const elapsed = gustStart < 0 ? 0 : canvas.frameCount - gustStart;
         const gust = blowing ? Math.min(1, elapsed / 20) : 0;
+        const nounJiggleAge = canvas.frameCount - nounJiggleStart;
+        const nounJiggle = nounJiggleAge >= 0 && nounJiggleAge < 32 ? Math.sin(nounJiggleAge * 0.75) * 7 * (1 - nounJiggleAge / 32) : 0;
         // Only the leaves dance: the trunk stays rooted in the ground.
-        const leafJuggle = blowing ? Math.sin(elapsed * 0.26) * 8 * gust : 0;
+        const leafJuggle = (blowing ? Math.sin(elapsed * 0.26) * 8 * gust : 0) + nounJiggle;
 
         // A quiet watercolor-paper base keeps the scene readable before it moves.
         canvas.background('#fffaf0');
@@ -848,16 +860,20 @@ function WindCanvas({ activeWords }: { activeWords: string[] }) {
         if (showUmbrella) {
           const umbrellaX = width * 0.35;
           const umbrellaY = height * 0.68;
+          canvas.push();
+          canvas.translate(umbrellaX, umbrellaY);
+          canvas.rotate(nounJiggle * 0.018);
           canvas.stroke('#5b7893');
           canvas.strokeWeight(5);
-          canvas.line(umbrellaX, umbrellaY - 75, umbrellaX, umbrellaY + 40);
+          canvas.line(0, -75, 0, 40);
           canvas.noFill();
-          canvas.arc(umbrellaX + 10, umbrellaY + 37, 18, 18, 0, canvas.PI);
+          canvas.arc(10, 37, 18, 18, 0, canvas.PI);
           canvas.noStroke();
           canvas.fill('#f38f75');
-          canvas.arc(umbrellaX, umbrellaY - 75, 120, 74, canvas.PI, canvas.TWO_PI);
+          canvas.arc(0, -75, 120, 74, canvas.PI, canvas.TWO_PI);
           canvas.fill('#ffd76a');
-          canvas.arc(umbrellaX, umbrellaY - 75, 40, 74, canvas.PI, canvas.TWO_PI);
+          canvas.arc(0, -75, 40, 74, canvas.PI, canvas.TWO_PI);
+          canvas.pop();
         }
 
         const treeX = width * 0.7;
@@ -943,6 +959,8 @@ function WindScene() {
   const [isListening, setIsListening] = useState(false);
   const [playedWords, setPlayedWords] = useState<Set<string>>(() => new Set());
   const [activeWords, setActiveWords] = useState<string[]>([]);
+  const [triggeredWords, setTriggeredWords] = useState<string[]>([]);
+  const [interactionId, setInteractionId] = useState(0);
   const [status, setStatus] = useState('Say a word or make a silly recipe.');
   const listeningTimerRef = useRef<number | null>(null);
 
@@ -960,6 +978,8 @@ function WindScene() {
   const applyWordsToCanvas = (words: string[], replaceCanvas = false) => {
     if (!words.length) return;
     setActiveWords((current) => replaceCanvas ? words : [...new Set([...current, ...words])]);
+    setTriggeredWords(words);
+    setInteractionId((current) => current + 1);
   };
 
   const listenForRecipe = () => {
@@ -985,6 +1005,8 @@ function WindScene() {
       setIsListening(false);
     };
     recognition.onresult = (event) => {
+      const latestResult = event.results[event.results.length - 1];
+      if (!latestResult?.isFinal) return;
       const heard = Array.from({ length: event.results.length }, (_, index) => event.results[index]?.[0]?.transcript ?? '').join(' ').toLowerCase();
       const found = markWordsPlayed(heard);
       if (found.length) {
@@ -1023,7 +1045,7 @@ function WindScene() {
             </div>
           </aside>
           <div className="paper-shadow canvas-grid flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4">
-            <div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div>
+            <div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} triggeredWords={triggeredWords} interactionId={interactionId} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div>
             <div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between">
               <div><p className="font-black">Make a silly recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
               <button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Listening…' : 'Speak'}</button>
