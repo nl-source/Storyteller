@@ -789,10 +789,10 @@ function NatureCanvas({ action }: { action: NatureAction }) {
   );
 }
 
-function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
+function WindCanvas({ activeWords }: { activeWords: string[] }) {
   const holderRef = useRef<HTMLDivElement>(null);
-  const blowingRef = useRef(isBlowing);
-  blowingRef.current = isBlowing;
+  const activeWordsRef = useRef(activeWords);
+  activeWordsRef.current = activeWords;
 
   useEffect(() => {
     if (!holderRef.current) return;
@@ -819,7 +819,8 @@ function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
       canvas.windowResized = resize;
 
       canvas.draw = () => {
-        const blowing = blowingRef.current;
+        const blowing = activeWordsRef.current.includes('wind') || activeWordsRef.current.includes('blow');
+        const showUmbrella = activeWordsRef.current.includes('umbrella');
         if (blowing && !wasBlowing) gustStart = canvas.frameCount;
         wasBlowing = blowing;
         const elapsed = gustStart < 0 ? 0 : canvas.frameCount - gustStart;
@@ -843,6 +844,21 @@ function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
         canvas.circle(width * 0.14, height * 0.16, 52);
         canvas.fill('#fffbd2');
         canvas.circle(width * 0.14, height * 0.16, 40);
+
+        if (showUmbrella) {
+          const umbrellaX = width * 0.35;
+          const umbrellaY = height * 0.68;
+          canvas.stroke('#5b7893');
+          canvas.strokeWeight(5);
+          canvas.line(umbrellaX, umbrellaY - 75, umbrellaX, umbrellaY + 40);
+          canvas.noFill();
+          canvas.arc(umbrellaX + 10, umbrellaY + 37, 18, 18, 0, canvas.PI);
+          canvas.noStroke();
+          canvas.fill('#f38f75');
+          canvas.arc(umbrellaX, umbrellaY - 75, 120, 74, canvas.PI, canvas.TWO_PI);
+          canvas.fill('#ffd76a');
+          canvas.arc(umbrellaX, umbrellaY - 75, 40, 74, canvas.PI, canvas.TWO_PI);
+        }
 
         const treeX = width * 0.7;
         const treeY = height * 0.78;
@@ -897,11 +913,6 @@ function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
             canvas.fill(index % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 15, 7); canvas.pop();
           }
         }
-        canvas.fill('#294b58');
-        canvas.textAlign(canvas.CENTER, canvas.CENTER);
-        canvas.textStyle(canvas.BOLD);
-        canvas.textSize(15);
-        if (blowing) canvas.text('“Oh no, the wind is blowing in my face!”', width * 0.5, height * 0.94);
       };
     };
     const instance = new p5(sketch);
@@ -929,15 +940,13 @@ const wordTypeStyles = {
 } as const;
 
 function WindScene() {
-  const [isBlowing, setIsBlowing] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [playedWords, setPlayedWords] = useState<Set<string>>(() => new Set());
+  const [activeWords, setActiveWords] = useState<string[]>([]);
   const [status, setStatus] = useState('Say a word or make a silly recipe.');
-  const resetTimerRef = useRef<number | null>(null);
   const listeningTimerRef = useRef<number | null>(null);
 
   useEffect(() => () => {
-    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
     if (listeningTimerRef.current !== null) window.clearTimeout(listeningTimerRef.current);
   }, []);
 
@@ -948,11 +957,9 @@ function WindScene() {
     return foundWords.map(({ word }) => word);
   };
 
-  const playScene = () => {
-    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
-    setIsBlowing(true);
-    setStatus('Great! The wind blows the tree.');
-    resetTimerRef.current = window.setTimeout(() => setIsBlowing(false), 4700);
+  const applyWordsToCanvas = (words: string[], replaceCanvas = false) => {
+    if (!words.length) return;
+    setActiveWords((current) => replaceCanvas ? words : [...new Set([...current, ...words])]);
   };
 
   const listenForRecipe = () => {
@@ -980,8 +987,10 @@ function WindScene() {
     recognition.onresult = (event) => {
       const heard = Array.from({ length: event.results.length }, (_, index) => event.results[index]?.[0]?.transcript ?? '').join(' ').toLowerCase();
       const found = markWordsPlayed(heard);
-      if (/\bwind\b/.test(heard) && /\bblows?\b/.test(heard) && /\btree\b/.test(heard)) playScene();
-      else if (found.length) setStatus(`Recipe heard: ${found.join(' + ')}.`);
+      if (found.length) {
+        applyWordsToCanvas(found, true);
+        setStatus(`Recipe heard: ${found.join(' + ')}.`);
+      }
       else setStatus(`I heard “${heard}”. Try one of the word cards.`);
     };
     recognition.start();
@@ -1006,7 +1015,7 @@ function WindScene() {
                 <button key={word} type="button" onClick={() => {
                   window.speechSynthesis?.cancel();
                   const utterance = new SpeechSynthesisUtterance(word); utterance.lang = 'en-US'; utterance.rate = 0.78; window.speechSynthesis?.speak(utterance);
-                  markWordsPlayed(word); setStatus(`Listen: ${word}.`);
+                  markWordsPlayed(word); applyWordsToCanvas([word]); setStatus(`Listen: ${word}.`);
                 }} className={`flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm transition-transform hover:-translate-y-0.5 ${playedWords.has(word) ? 'ring-2 ring-secondary' : ''}`}>
                   <span className="capitalize">{word} <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-black ${wordTypeStyles[type]}`}>{type}</span></span><Icon size={16} className="text-secondary" />
                 </button>
@@ -1014,10 +1023,10 @@ function WindScene() {
             </div>
           </aside>
           <div className="paper-shadow canvas-grid flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4">
-            <div className="relative min-h-[330px] flex-1"><WindCanvas isBlowing={isBlowing} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div>
+            <div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div>
             <div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between">
               <div><p className="font-black">Make a silly recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
-              <div className="flex shrink-0 gap-2"><button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Listening…' : 'Speak'}</button><button type="button" onClick={playScene} className="min-h-11 rounded-full border-2 border-sidebar-foreground/20 bg-card px-4 text-sm font-black text-foreground">Play the scene</button></div>
+              <button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Listening…' : 'Speak'}</button>
             </div>
           </div>
         </section>
