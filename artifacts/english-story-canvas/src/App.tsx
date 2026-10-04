@@ -835,9 +835,11 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
         const softly = activeWordsRef.current.includes('softly');
         const strongly = activeWordsRef.current.includes('strongly');
         const heavily = activeWordsRef.current.includes('heavily');
-        const recipeMatch = /\b(wind|umbrella|tree)\b.*\bblows?\b.*\b(wind|umbrella|tree)\b/.exec(recipeRef.current);
-        const blower = recipeMatch?.[1];
-        const target = recipeMatch?.[2];
+        const recipeWords = recipeRef.current.match(/\b(?:wind|umbrella|tree|blows?)\b/g) ?? [];
+        const blowIndex = recipeWords.findIndex((word) => word === 'blow' || word === 'blows');
+        // Read the noun on either side of "blows", rather than guessing from every word heard.
+        const blower = blowIndex > 0 ? recipeWords[blowIndex - 1] : undefined;
+        const target = blowIndex >= 0 ? recipeWords[blowIndex + 1] : undefined;
         const tornado = blowing && heavily;
         const treeFlying = /\btree\s+flies?\b/.test(recipeRef.current) || (tornado && hasTree);
         const umbrellaFlying = /\bumbrella\s+flies?\b/.test(recipeRef.current);
@@ -947,7 +949,10 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
           canvas.noFill();
           canvas.stroke('#253d4d');
           canvas.strokeWeight(3);
-          if (blower === 'tree') canvas.arc(20, -height * 0.41, 22, 17, 0, canvas.PI);
+          if (blower === 'tree') {
+            // A round, left-facing "whooo" mouth makes the tree the obvious speaker.
+            canvas.ellipse(-2, -height * 0.42, 15, 18);
+          }
           else if (blowing) canvas.ellipse(20, -height * 0.41, 14, 18);
           else canvas.arc(20, -height * 0.41, 22, 17, 0, canvas.PI);
           canvas.noStroke();
@@ -972,13 +977,15 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
           }
           // Air starts at the named blower and travels toward the named target.
           if (blower && target && (blower === 'umbrella' || blower === 'tree')) {
-            const fromX = blower === 'umbrella' ? width * 0.39 : width * 0.64;
-            const toX = target === 'umbrella' ? width * 0.4 : target === 'tree' ? width * 0.64 : blower === 'umbrella' ? width * 0.9 : width * 0.1;
+            const fromX = blower === 'umbrella' ? width * 0.41 : width * 0.59;
+            const toX = target === 'umbrella' ? width * 0.43 : target === 'tree' ? width * 0.61 : blower === 'umbrella' ? width * 0.9 : width * 0.1;
             for (let puff = 0; puff < 4; puff += 1) {
               const progress = (puff + ((elapsed * 0.025) % 1)) / 4;
-              canvas.fill('#fffdf7');
+              const x = fromX + (toX - fromX) * progress;
               const curve = Math.sin(progress * canvas.PI) * -18;
-              canvas.circle(fromX + (toX - fromX) * progress, height * 0.5 + curve, 9 + puff * 2);
+              canvas.noFill(); canvas.stroke('#fffdf7'); canvas.strokeWeight(5);
+              canvas.arc(x, height * 0.5 + curve, 25 + puff * 4, 13, canvas.PI * 1.08, canvas.PI * 1.9);
+              canvas.noStroke();
             }
           }
         }
