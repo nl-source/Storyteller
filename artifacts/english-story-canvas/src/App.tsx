@@ -835,7 +835,7 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
         const softly = activeWordsRef.current.includes('softly');
         const strongly = activeWordsRef.current.includes('strongly');
         const heavily = activeWordsRef.current.includes('heavily');
-        const recipeMatch = /\b(wind|umbrella|tree)\b.*\bblows?\b.*\b(umbrella|tree)\b/.exec(recipeRef.current);
+        const recipeMatch = /\b(wind|umbrella|tree)\b.*\bblows?\b.*\b(wind|umbrella|tree)\b/.exec(recipeRef.current);
         const blower = recipeMatch?.[1];
         const target = recipeMatch?.[2];
         const tornado = blowing && heavily;
@@ -903,7 +903,8 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
             canvas.fill('#253d4d');
             canvas.circle(-17, -68, 6); canvas.circle(17, -68, 6);
             canvas.noFill(); canvas.stroke('#253d4d'); canvas.strokeWeight(2.5);
-            canvas.arc(0, -55, 18, 12, blower === 'umbrella' ? 0 : canvas.PI, blower === 'umbrella' ? canvas.PI : canvas.TWO_PI);
+            if (blower === 'umbrella') canvas.arc(0, -55, 18, 12, 0, canvas.PI);
+            else canvas.ellipse(0, -55, 13, 16);
             canvas.noStroke();
           }
           canvas.pop();
@@ -946,7 +947,9 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
           canvas.noFill();
           canvas.stroke('#253d4d');
           canvas.strokeWeight(3);
-          canvas.arc(20, -height * 0.41, 22, 17, blowing ? canvas.PI * 1.04 : 0, blowing ? canvas.TWO_PI - 0.1 : canvas.PI);
+          if (blower === 'tree') canvas.arc(20, -height * 0.41, 22, 17, 0, canvas.PI);
+          else if (blowing) canvas.ellipse(20, -height * 0.41, 14, 18);
+          else canvas.arc(20, -height * 0.41, 22, 17, 0, canvas.PI);
           canvas.noStroke();
         }
         canvas.pop();
@@ -968,13 +971,14 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
             canvas.fill(index % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 15, 7); canvas.pop();
           }
           // Air starts at the named blower and travels toward the named target.
-          if (showUmbrella && hasTree && blower && target) {
+          if (blower && target && (blower === 'umbrella' || blower === 'tree')) {
             const fromX = blower === 'umbrella' ? width * 0.39 : width * 0.64;
-            const toX = target === 'umbrella' ? width * 0.4 : width * 0.64;
+            const toX = target === 'umbrella' ? width * 0.4 : target === 'tree' ? width * 0.64 : blower === 'umbrella' ? width * 0.9 : width * 0.1;
             for (let puff = 0; puff < 4; puff += 1) {
               const progress = (puff + ((elapsed * 0.025) % 1)) / 4;
               canvas.fill('#fffdf7');
-              canvas.circle(fromX + (toX - fromX) * progress, height * (0.48 + Math.sin((elapsed + puff) * 0.25) * 0.025), 9 + puff * 2);
+              const curve = Math.sin(progress * canvas.PI) * -18;
+              canvas.circle(fromX + (toX - fromX) * progress, height * 0.5 + curve, 9 + puff * 2);
             }
           }
         }
@@ -1070,7 +1074,8 @@ function WindScene() {
     recognition.onresult = (event) => {
       const latestResult = event.results[event.results.length - 1];
       if (!latestResult?.isFinal) return;
-      const heard = Array.from({ length: event.results.length }, (_, index) => event.results[index]?.[0]?.transcript ?? '').join(' ').toLowerCase();
+      // Each completed utterance is a new recipe, so its adverb replaces the last one.
+      const heard = latestResult[0]?.transcript?.toLowerCase() ?? '';
       const found = markWordsPlayed(heard);
       if (found.length) {
         applyWordsToCanvas(found, true, heard);
