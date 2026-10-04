@@ -789,16 +789,18 @@ function NatureCanvas({ action }: { action: NatureAction }) {
   );
 }
 
-function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { activeWords: string[]; triggeredWords: string[]; interactionId: number; recipe: string }) {
+function WindCanvas({ activeWords, persistentWords, triggeredWords, interactionId, recipe }: { activeWords: string[]; persistentWords: string[]; triggeredWords: string[]; interactionId: number; recipe: string }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const activeWordsRef = useRef(activeWords);
   const triggeredWordsRef = useRef(triggeredWords);
   const interactionIdRef = useRef(interactionId);
   const recipeRef = useRef(recipe);
+  const persistentWordsRef = useRef(persistentWords);
   activeWordsRef.current = activeWords;
   triggeredWordsRef.current = triggeredWords;
   interactionIdRef.current = interactionId;
   recipeRef.current = recipe;
+  persistentWordsRef.current = persistentWords;
 
   useEffect(() => {
     if (!holderRef.current) return;
@@ -829,7 +831,7 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
 
       canvas.draw = () => {
         const blowing = activeWordsRef.current.includes('wind') || activeWordsRef.current.includes('blow');
-        const showUmbrella = activeWordsRef.current.includes('umbrella');
+        const showUmbrella = activeWordsRef.current.includes('umbrella') || persistentWordsRef.current.includes('umbrella');
         const hasTree = activeWordsRef.current.includes('tree');
         const hasFly = activeWordsRef.current.includes('fly');
         const softly = activeWordsRef.current.includes('softly');
@@ -840,7 +842,7 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
         // Read the noun on either side of "blows", rather than guessing from every word heard.
         const blower = blowIndex > 0 ? recipeWords[blowIndex - 1] : undefined;
         const target = blowIndex >= 0 ? recipeWords[blowIndex + 1] : undefined;
-        const tornado = blowing && heavily;
+        const tornado = blower === 'wind' && heavily;
         const treeFlying = /\btree\s+flies?\b/.test(recipeRef.current) || (tornado && hasTree);
         const umbrellaFlying = /\bumbrella\s+flies?\b/.test(recipeRef.current);
         const treeHasWings = treeFlying && !tornado;
@@ -858,7 +860,8 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
         const nounJiggleAge = canvas.frameCount - nounJiggleStart;
         const nounJiggle = nounJiggleAge >= 0 && nounJiggleAge < 32 ? Math.sin(nounJiggleAge * 0.75) * 7 * (1 - nounJiggleAge / 32) : 0;
         // Only the leaves dance: the trunk stays rooted in the ground.
-        const leafJuggle = (blowing ? Math.sin(elapsed * 0.26) * 8 * gust : 0) + nounJiggle;
+        const treeReceivesWind = target === 'tree' || (!target && blowing);
+        const leafJuggle = (treeReceivesWind ? Math.sin(elapsed * 0.26) * 8 * gust : 0) + nounJiggle;
         const treeLift = treeFlying ? Math.min(height * 1.25, Math.max(0, sceneElapsed - 14) * (tornado ? 2.6 : 3.8)) : 0;
 
         // A quiet watercolor-paper base keeps the scene readable before it moves.
@@ -882,11 +885,14 @@ function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { ac
           const umbrellaX = width * 0.35;
           const umbrellaY = height * 0.68;
           const umbrellaLift = umbrellaFlying ? Math.min(height * 1.2, Math.max(0, sceneElapsed - 10) * 3.8) : 0;
-          const umbrellaSpinning = blowing && (target === 'umbrella' || (!target && !hasTree));
+          const umbrellaTargeted = target === 'umbrella' || (!target && blowing && !hasTree);
+          const umbrellaRotation = umbrellaTargeted
+            ? heavily ? elapsed * 0.25 : strongly ? canvas.PI * Math.min(1, sceneElapsed / 12) : Math.sin(elapsed * 0.25) * 0.12
+            : 0;
           canvas.push();
           canvas.translate(umbrellaX, umbrellaY - umbrellaLift);
           // The umbrella spins only when it is the thing being blown.
-          canvas.rotate((umbrellaSpinning ? elapsed * 0.18 * gustPower : umbrellaFlying ? Math.sin(sceneElapsed * 0.15) * 0.15 : 0) + nounJiggle * 0.018);
+          canvas.rotate(umbrellaRotation + (umbrellaFlying ? Math.sin(sceneElapsed * 0.15) * 0.15 : 0) + nounJiggle * 0.018);
           if (umbrellaFlying) {
             canvas.fill('#fffdf7'); canvas.stroke('#7d99ad'); canvas.strokeWeight(2);
             canvas.ellipse(-70, -20, 54, 22); canvas.ellipse(70, -20, 54, 22); canvas.noStroke();
@@ -1034,6 +1040,8 @@ function WindScene() {
   const [triggeredWords, setTriggeredWords] = useState<string[]>([]);
   const [interactionId, setInteractionId] = useState(0);
   const [recipe, setRecipe] = useState('');
+  const [persistentWords, setPersistentWords] = useState<string[]>([]);
+  const [sceneHistory, setSceneHistory] = useState<Array<{ words: string[]; persistent: string[]; recipe: string }>>([]);
   const [status, setStatus] = useState('Say a word or make a silly recipe.');
   const recognitionRef = useRef<SpeechLike | null>(null);
 
@@ -1050,10 +1058,27 @@ function WindScene() {
 
   const applyWordsToCanvas = (words: string[], replaceCanvas = false, heardRecipe = '') => {
     if (!words.length) return;
+    setSceneHistory((current) => [...current, { words: activeWords, persistent: persistentWords, recipe }]);
     setActiveWords((current) => replaceCanvas ? words : [...new Set([...current, ...words])]);
+    const newNouns = words.filter((word) => word === 'umbrella');
+    if (newNouns.length) setPersistentWords((current) => [...new Set([...current, ...newNouns])]);
     setTriggeredWords(words);
     setInteractionId((current) => current + 1);
     if (heardRecipe) setRecipe(heardRecipe);
+  };
+
+  const clearCanvas = () => {
+    setSceneHistory((current) => [...current, { words: activeWords, persistent: persistentWords, recipe }]);
+    setActiveWords([]); setPersistentWords([]); setTriggeredWords([]); setRecipe(''); setInteractionId((current) => current + 1);
+    setStatus('Canvas cleared. The tree, sky, and land are ready.');
+  };
+
+  const restorePreviousScene = () => {
+    const previous = sceneHistory[sceneHistory.length - 1];
+    if (!previous) { setStatus('There is no previous scene yet.'); return; }
+    setActiveWords(previous.words); setPersistentWords(previous.persistent); setRecipe(previous.recipe);
+    setTriggeredWords(previous.words); setInteractionId((current) => current + 1);
+    setSceneHistory((current) => current.slice(0, -1)); setStatus('Previous scene restored.');
   };
 
   const listenForRecipe = () => {
@@ -1120,7 +1145,7 @@ function WindScene() {
             </div>
           </aside>
           <div className="paper-shadow canvas-grid flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4">
-            <div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} triggeredWords={triggeredWords} interactionId={interactionId} recipe={recipe} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div>
+            <div className="flex min-h-[330px] flex-1 flex-col gap-3 lg:flex-row"><div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} persistentWords={persistentWords} triggeredWords={triggeredWords} interactionId={interactionId} recipe={recipe} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div><aside className="rounded-[20px] bg-[#fff8e8] p-4 lg:w-52"><p className="mono-label text-primary">what I just heard…</p><p className="mt-3 text-sm font-bold leading-relaxed text-primary">{recipe || 'Say a recipe and I will write it here.'}</p><div className="mt-5 grid gap-2"><button type="button" onClick={restorePreviousScene} className="rounded-full border-2 border-primary bg-card px-3 py-2 text-xs font-black text-primary">Previous scene</button><button type="button" onClick={clearCanvas} className="rounded-full bg-primary px-3 py-2 text-xs font-black text-primary-foreground">Clear canvas</button></div></aside></div>
             <div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between">
               <div><p className="font-black">Make a silly recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
               <button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Stop listening' : 'Speak'}</button>
