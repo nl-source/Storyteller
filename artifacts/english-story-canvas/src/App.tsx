@@ -789,14 +789,16 @@ function NatureCanvas({ action }: { action: NatureAction }) {
   );
 }
 
-function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWords: string[]; triggeredWords: string[]; interactionId: number }) {
+function WindCanvas({ activeWords, triggeredWords, interactionId, recipe }: { activeWords: string[]; triggeredWords: string[]; interactionId: number; recipe: string }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const activeWordsRef = useRef(activeWords);
   const triggeredWordsRef = useRef(triggeredWords);
   const interactionIdRef = useRef(interactionId);
+  const recipeRef = useRef(recipe);
   activeWordsRef.current = activeWords;
   triggeredWordsRef.current = triggeredWords;
   interactionIdRef.current = interactionId;
+  recipeRef.current = recipe;
 
   useEffect(() => {
     if (!holderRef.current) return;
@@ -833,8 +835,12 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
         const softly = activeWordsRef.current.includes('softly');
         const strongly = activeWordsRef.current.includes('strongly');
         const heavily = activeWordsRef.current.includes('heavily');
+        const recipeMatch = /\b(wind|umbrella|tree)\b.*\bblows?\b.*\b(umbrella|tree)\b/.exec(recipeRef.current);
+        const blower = recipeMatch?.[1];
+        const target = recipeMatch?.[2];
         const tornado = blowing && heavily;
-        const treeFlying = hasTree && hasFly;
+        const treeFlying = /\btree\s+flies?\b/.test(recipeRef.current) || (tornado && hasTree);
+        const umbrellaFlying = /\bumbrella\s+flies?\b/.test(recipeRef.current);
         const treeHasWings = treeFlying && !tornado;
         if (interactionIdRef.current !== lastInteractionId) {
           lastInteractionId = interactionIdRef.current;
@@ -845,7 +851,7 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
         wasBlowing = blowing;
         const elapsed = gustStart < 0 ? 0 : canvas.frameCount - gustStart;
         const sceneElapsed = canvas.frameCount - sceneStart;
-        const gustPower = softly ? 0.4 : strongly ? 1.7 : heavily ? 2.3 : 1;
+        const gustPower = softly ? 0.16 : strongly ? 2.8 : heavily ? 3.2 : 1;
         const gust = blowing ? Math.min(1, elapsed / 20) * gustPower : 0;
         const nounJiggleAge = canvas.frameCount - nounJiggleStart;
         const nounJiggle = nounJiggleAge >= 0 && nounJiggleAge < 32 ? Math.sin(nounJiggleAge * 0.75) * 7 * (1 - nounJiggleAge / 32) : 0;
@@ -873,10 +879,16 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
         if (showUmbrella) {
           const umbrellaX = width * 0.35;
           const umbrellaY = height * 0.68;
+          const umbrellaLift = umbrellaFlying ? Math.min(height * 1.2, Math.max(0, sceneElapsed - 10) * 3.8) : 0;
+          const umbrellaSpinning = blowing && (target === 'umbrella' || (!target && !hasTree));
           canvas.push();
-          canvas.translate(umbrellaX, umbrellaY);
-          // Wind makes the umbrella whirl; a lone umbrella still gets its small noun jiggle.
-          canvas.rotate((blowing ? elapsed * 0.18 * gustPower : 0) + nounJiggle * 0.018);
+          canvas.translate(umbrellaX, umbrellaY - umbrellaLift);
+          // The umbrella spins only when it is the thing being blown.
+          canvas.rotate((umbrellaSpinning ? elapsed * 0.18 * gustPower : umbrellaFlying ? Math.sin(sceneElapsed * 0.15) * 0.15 : 0) + nounJiggle * 0.018);
+          if (umbrellaFlying) {
+            canvas.fill('#fffdf7'); canvas.stroke('#7d99ad'); canvas.strokeWeight(2);
+            canvas.ellipse(-70, -20, 54, 22); canvas.ellipse(70, -20, 54, 22); canvas.noStroke();
+          }
           canvas.stroke('#5b7893');
           canvas.strokeWeight(5);
           canvas.line(0, -75, 0, 40);
@@ -887,11 +899,11 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
           canvas.arc(0, -75, 120, 74, canvas.PI, canvas.TWO_PI);
           canvas.fill('#ffd76a');
           canvas.arc(0, -75, 40, 74, canvas.PI, canvas.TWO_PI);
-          if (blowing) {
+          if (blowing || umbrellaFlying) {
             canvas.fill('#253d4d');
             canvas.circle(-17, -68, 6); canvas.circle(17, -68, 6);
             canvas.noFill(); canvas.stroke('#253d4d'); canvas.strokeWeight(2.5);
-            canvas.arc(0, -55, 18, 12, 0, canvas.PI);
+            canvas.arc(0, -55, 18, 12, blower === 'umbrella' ? 0 : canvas.PI, blower === 'umbrella' ? canvas.PI : canvas.TWO_PI);
             canvas.noStroke();
           }
           canvas.pop();
@@ -955,24 +967,27 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
             canvas.push(); canvas.translate(x, y); canvas.rotate(elapsed * 0.16 + index);
             canvas.fill(index % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 15, 7); canvas.pop();
           }
-          // When two characters are in the recipe, the little puffs make their conversation visible.
-          if (showUmbrella && hasTree) {
+          // Air starts at the named blower and travels toward the named target.
+          if (showUmbrella && hasTree && blower && target) {
+            const fromX = blower === 'umbrella' ? width * 0.39 : width * 0.64;
+            const toX = target === 'umbrella' ? width * 0.4 : width * 0.64;
             for (let puff = 0; puff < 4; puff += 1) {
               const progress = (puff + ((elapsed * 0.025) % 1)) / 4;
               canvas.fill('#fffdf7');
-              canvas.circle(width * (0.42 + progress * 0.2), height * (0.48 + Math.sin((elapsed + puff) * 0.25) * 0.025), 9 + puff * 2);
+              canvas.circle(fromX + (toX - fromX) * progress, height * (0.48 + Math.sin((elapsed + puff) * 0.25) * 0.025), 9 + puff * 2);
             }
           }
         }
         if (tornado) {
-          const tornadoX = treeX - Math.min(width * 0.26, elapsed * 4.5);
+          const tornadoX = width * (0.18 + 0.52 * Math.min(1, sceneElapsed / 42));
           const tornadoY = height * 0.8;
-          canvas.noFill(); canvas.stroke('#8ba9bd'); canvas.strokeWeight(5);
-          for (let ring = 0; ring < 6; ring += 1) {
-            const y = tornadoY - ring * 22;
-            const diameter = 80 - ring * 9;
-            canvas.arc(tornadoX, y, diameter, 16, elapsed * 0.2 + ring, elapsed * 0.2 + ring + canvas.PI * 1.7);
+          canvas.noFill(); canvas.stroke('#6f94ab'); canvas.strokeWeight(5);
+          for (let ring = 0; ring < 8; ring += 1) {
+            const y = tornadoY - ring * 19;
+            const diameter = 24 + ring * 15;
+            canvas.arc(tornadoX, y, diameter, 13 + ring * 1.5, elapsed * 0.24 + ring * 0.42, elapsed * 0.24 + ring * 0.42 + canvas.PI * 1.72);
           }
+          canvas.fill('#a5c3d3'); canvas.ellipse(tornadoX, tornadoY - 145, 120, 35);
           canvas.noStroke();
         }
       };
@@ -1007,12 +1022,11 @@ function WindScene() {
   const [activeWords, setActiveWords] = useState<string[]>([]);
   const [triggeredWords, setTriggeredWords] = useState<string[]>([]);
   const [interactionId, setInteractionId] = useState(0);
+  const [recipe, setRecipe] = useState('');
   const [status, setStatus] = useState('Say a word or make a silly recipe.');
-  const listeningTimerRef = useRef<number | null>(null);
+  const recognitionRef = useRef<SpeechLike | null>(null);
 
-  useEffect(() => () => {
-    if (listeningTimerRef.current !== null) window.clearTimeout(listeningTimerRef.current);
-  }, []);
+  useEffect(() => () => recognitionRef.current?.stop(), []);
 
   const markWordsPlayed = (phrase: string) => {
     const lowerCasePhrase = phrase.toLowerCase();
@@ -1023,14 +1037,16 @@ function WindScene() {
     return foundWords.map(({ word }) => word);
   };
 
-  const applyWordsToCanvas = (words: string[], replaceCanvas = false) => {
+  const applyWordsToCanvas = (words: string[], replaceCanvas = false, heardRecipe = '') => {
     if (!words.length) return;
     setActiveWords((current) => replaceCanvas ? words : [...new Set([...current, ...words])]);
     setTriggeredWords(words);
     setInteractionId((current) => current + 1);
+    if (heardRecipe) setRecipe(heardRecipe);
   };
 
   const listenForRecipe = () => {
+    if (isListening) { recognitionRef.current?.stop(); return; }
     const speechWindow = window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor };
     const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (!Recognition) {
@@ -1038,18 +1054,17 @@ function WindScene() {
       return;
     }
     const recognition = new Recognition();
+    recognitionRef.current = recognition;
     recognition.lang = 'en-US';
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onstart = () => {
       setIsListening(true);
       setStatus('Listening… make a silly recipe with any words.');
-      listeningTimerRef.current = window.setTimeout(() => recognition.stop(), 8000);
     };
     recognition.onerror = () => { setIsListening(false); setStatus('I could not hear that. Try the sentence again, or play the scene.'); };
     recognition.onend = () => {
-      if (listeningTimerRef.current !== null) window.clearTimeout(listeningTimerRef.current);
-      listeningTimerRef.current = null;
+      recognitionRef.current = null;
       setIsListening(false);
     };
     recognition.onresult = (event) => {
@@ -1058,7 +1073,7 @@ function WindScene() {
       const heard = Array.from({ length: event.results.length }, (_, index) => event.results[index]?.[0]?.transcript ?? '').join(' ').toLowerCase();
       const found = markWordsPlayed(heard);
       if (found.length) {
-        applyWordsToCanvas(found, true);
+        applyWordsToCanvas(found, true, heard);
         setStatus(`Recipe heard: ${found.join(' + ')}.`);
       }
       else setStatus(`I heard “${heard}”. Try one of the word cards.`);
@@ -1093,10 +1108,10 @@ function WindScene() {
             </div>
           </aside>
           <div className="paper-shadow canvas-grid flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4">
-            <div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} triggeredWords={triggeredWords} interactionId={interactionId} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div>
+            <div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} triggeredWords={triggeredWords} interactionId={interactionId} recipe={recipe} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div>
             <div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between">
               <div><p className="font-black">Make a silly recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
-              <button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Listening…' : 'Speak'}</button>
+              <button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Stop listening' : 'Speak'}</button>
             </div>
           </div>
         </section>
