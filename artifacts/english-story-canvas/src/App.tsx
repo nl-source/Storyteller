@@ -807,6 +807,7 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
       let wasBlowing = false;
       let lastInteractionId = interactionId;
       let nounJiggleStart = -1000;
+      let sceneStart = 0;
 
       const resize = () => {
         const box = holderRef.current?.getBoundingClientRect();
@@ -827,18 +828,30 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
       canvas.draw = () => {
         const blowing = activeWordsRef.current.includes('wind') || activeWordsRef.current.includes('blow');
         const showUmbrella = activeWordsRef.current.includes('umbrella');
+        const hasTree = activeWordsRef.current.includes('tree');
+        const hasFly = activeWordsRef.current.includes('fly');
+        const softly = activeWordsRef.current.includes('softly');
+        const strongly = activeWordsRef.current.includes('strongly');
+        const heavily = activeWordsRef.current.includes('heavily');
+        const tornado = blowing && heavily;
+        const treeFlying = hasTree && hasFly;
+        const treeHasWings = treeFlying && !tornado;
         if (interactionIdRef.current !== lastInteractionId) {
           lastInteractionId = interactionIdRef.current;
+          sceneStart = canvas.frameCount;
           if (triggeredWordsRef.current.some((word) => word === 'tree' || word === 'umbrella')) nounJiggleStart = canvas.frameCount;
         }
         if (blowing && !wasBlowing) gustStart = canvas.frameCount;
         wasBlowing = blowing;
         const elapsed = gustStart < 0 ? 0 : canvas.frameCount - gustStart;
-        const gust = blowing ? Math.min(1, elapsed / 20) : 0;
+        const sceneElapsed = canvas.frameCount - sceneStart;
+        const gustPower = softly ? 0.4 : strongly ? 1.7 : heavily ? 2.3 : 1;
+        const gust = blowing ? Math.min(1, elapsed / 20) * gustPower : 0;
         const nounJiggleAge = canvas.frameCount - nounJiggleStart;
         const nounJiggle = nounJiggleAge >= 0 && nounJiggleAge < 32 ? Math.sin(nounJiggleAge * 0.75) * 7 * (1 - nounJiggleAge / 32) : 0;
         // Only the leaves dance: the trunk stays rooted in the ground.
         const leafJuggle = (blowing ? Math.sin(elapsed * 0.26) * 8 * gust : 0) + nounJiggle;
+        const treeLift = treeFlying ? Math.min(height * 1.25, Math.max(0, sceneElapsed - 14) * (tornado ? 2.6 : 3.8)) : 0;
 
         // A quiet watercolor-paper base keeps the scene readable before it moves.
         canvas.background('#fffaf0');
@@ -862,7 +875,8 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
           const umbrellaY = height * 0.68;
           canvas.push();
           canvas.translate(umbrellaX, umbrellaY);
-          canvas.rotate(nounJiggle * 0.018);
+          // Wind makes the umbrella whirl; a lone umbrella still gets its small noun jiggle.
+          canvas.rotate((blowing ? elapsed * 0.18 * gustPower : 0) + nounJiggle * 0.018);
           canvas.stroke('#5b7893');
           canvas.strokeWeight(5);
           canvas.line(0, -75, 0, 40);
@@ -873,13 +887,26 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
           canvas.arc(0, -75, 120, 74, canvas.PI, canvas.TWO_PI);
           canvas.fill('#ffd76a');
           canvas.arc(0, -75, 40, 74, canvas.PI, canvas.TWO_PI);
+          if (blowing) {
+            canvas.fill('#253d4d');
+            canvas.circle(-17, -68, 6); canvas.circle(17, -68, 6);
+            canvas.noFill(); canvas.stroke('#253d4d'); canvas.strokeWeight(2.5);
+            canvas.arc(0, -55, 18, 12, 0, canvas.PI);
+            canvas.noStroke();
+          }
           canvas.pop();
         }
 
         const treeX = width * 0.7;
         const treeY = height * 0.78;
         canvas.push();
-        canvas.translate(treeX, treeY);
+        canvas.translate(treeX + (tornado ? Math.sin(elapsed * 0.35) * 15 : 0), treeY - treeLift);
+        if (treeFlying) canvas.rotate((tornado ? sceneElapsed * 0.15 : Math.sin(sceneElapsed * 0.15) * 0.13));
+        if (treeHasWings) {
+          canvas.fill('#fffdf7'); canvas.stroke('#7d99ad'); canvas.strokeWeight(2);
+          canvas.ellipse(-66, -height * 0.38, 62, 25); canvas.ellipse(72, -height * 0.38, 62, 25);
+          canvas.noStroke();
+        }
         canvas.fill('#8d5a3a');
         canvas.beginShape();
         canvas.vertex(-20, height * 0.14);
@@ -899,15 +926,15 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
           canvas.fill(color);
           canvas.ellipse(x + (index % 2 ? leafJuggle * 0.45 : -leafJuggle * 0.35), y + Math.sin(elapsed * 0.28 + index) * leafJuggle, w, h);
         });
-        // The face appears only during the target sentence, making the response feel earned.
-        if (blowing) {
+        // A tree can join the recipe by puffing air, while keeping its trunk rooted unless it flies.
+        if (blowing || treeFlying) {
           canvas.fill('#253d4d');
           canvas.circle(8, -height * 0.48, 7);
           canvas.circle(31, -height * 0.48, 7);
           canvas.noFill();
           canvas.stroke('#253d4d');
           canvas.strokeWeight(3);
-          canvas.arc(20, -height * 0.41, 22, 17, canvas.PI * 1.04, canvas.TWO_PI - 0.1);
+          canvas.arc(20, -height * 0.41, 22, 17, blowing ? canvas.PI * 1.04 : 0, blowing ? canvas.TWO_PI - 0.1 : canvas.PI);
           canvas.noStroke();
         }
         canvas.pop();
@@ -928,6 +955,17 @@ function WindCanvas({ activeWords, triggeredWords, interactionId }: { activeWord
             canvas.push(); canvas.translate(x, y); canvas.rotate(elapsed * 0.16 + index);
             canvas.fill(index % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 15, 7); canvas.pop();
           }
+        }
+        if (tornado) {
+          const tornadoX = treeX - Math.min(width * 0.26, elapsed * 4.5);
+          const tornadoY = height * 0.8;
+          canvas.noFill(); canvas.stroke('#8ba9bd'); canvas.strokeWeight(5);
+          for (let ring = 0; ring < 6; ring += 1) {
+            const y = tornadoY - ring * 22;
+            const diameter = 80 - ring * 9;
+            canvas.arc(tornadoX, y, diameter, 16, elapsed * 0.2 + ring, elapsed * 0.2 + ring + canvas.PI * 1.7);
+          }
+          canvas.noStroke();
         }
       };
     };
