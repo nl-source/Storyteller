@@ -824,7 +824,8 @@ function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
         wasBlowing = blowing;
         const elapsed = gustStart < 0 ? 0 : canvas.frameCount - gustStart;
         const gust = blowing ? Math.min(1, elapsed / 20) : 0;
-        const sway = blowing ? Math.sin(elapsed * 0.24) * 0.16 * gust : Math.sin(canvas.frameCount * 0.02) * 0.012;
+        // Only the leaves dance: the trunk stays rooted in the ground.
+        const leafJuggle = blowing ? Math.sin(elapsed * 0.26) * 8 * gust : 0;
 
         // A quiet watercolor-paper base keeps the scene readable before it moves.
         canvas.background('#fffaf0');
@@ -847,7 +848,6 @@ function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
         const treeY = height * 0.78;
         canvas.push();
         canvas.translate(treeX, treeY);
-        canvas.rotate(sway);
         canvas.fill('#8d5a3a');
         canvas.beginShape();
         canvas.vertex(-20, height * 0.14);
@@ -863,7 +863,10 @@ function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
         canvas.vertex(25, height * 0.14);
         canvas.endShape(canvas.CLOSE);
         const canopy = [[-39, -height * 0.54, 92, 83, '#54b878'], [13, -height * 0.61, 108, 96, '#40aa70'], [58, -height * 0.48, 84, 77, '#61bf7c'], [8, -height * 0.4, 114, 81, '#2e9d65']] as const;
-        canopy.forEach(([x, y, w, h, color]) => { canvas.fill(color); canvas.ellipse(x, y, w, h); });
+        canopy.forEach(([x, y, w, h, color], index) => {
+          canvas.fill(color);
+          canvas.ellipse(x + (index % 2 ? leafJuggle * 0.45 : -leafJuggle * 0.35), y + Math.sin(elapsed * 0.28 + index) * leafJuggle, w, h);
+        });
         // The face appears only during the target sentence, making the response feel earned.
         if (blowing) {
           canvas.fill('#253d4d');
@@ -888,8 +891,8 @@ function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
             canvas.noStroke();
           }
           for (let index = 0; index < 10; index += 1) {
-            const x = treeX - 30 + ((elapsed * 4.6 + index * 41) % (width * 0.5));
-            const y = height * (0.35 + ((index * 0.13 + elapsed * 0.015) % 0.35));
+            const x = treeX + Math.sin(elapsed * 0.18 + index * 2.1) * (36 + index * 3);
+            const y = treeY - height * (0.42 + (index % 3) * 0.06) + Math.cos(elapsed * 0.24 + index) * 22;
             canvas.push(); canvas.translate(x, y); canvas.rotate(elapsed * 0.16 + index);
             canvas.fill(index % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 15, 7); canvas.pop();
           }
@@ -909,25 +912,41 @@ function WindCanvas({ isBlowing }: { isBlowing: boolean }) {
 }
 
 const windWords = [
-  { word: 'Wind', meaning: '风', icon: Wind },
-  { word: 'Blow', meaning: '吹', icon: Wind },
-  { word: 'Umbrella', meaning: '雨伞', icon: Umbrella },
-  { word: 'Tree', meaning: '树', icon: Leaf },
-  { word: 'Fly', meaning: '飞', icon: Bird },
-  { word: 'Softly', meaning: '轻轻地', icon: Cloud },
-  { word: 'Heavily', meaning: '重重地', icon: CloudRain },
-  { word: 'Strongly', meaning: '强烈地', icon: Sparkles },
+  { word: 'wind', type: 'noun', icon: Wind },
+  { word: 'blow', type: 'verb', icon: Wind },
+  { word: 'umbrella', type: 'noun', icon: Umbrella },
+  { word: 'tree', type: 'noun', icon: Leaf },
+  { word: 'fly', type: 'verb', icon: Bird },
+  { word: 'softly', type: 'adverb', icon: Cloud },
+  { word: 'heavily', type: 'adverb', icon: CloudRain },
+  { word: 'strongly', type: 'adverb', icon: Sparkles },
 ] as const;
+
+const wordTypeStyles = {
+  noun: 'bg-sky-100 text-sky-700',
+  verb: 'bg-amber-100 text-amber-800',
+  adverb: 'bg-violet-100 text-violet-700',
+} as const;
 
 function WindScene() {
   const [isBlowing, setIsBlowing] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [status, setStatus] = useState('Say: “The wind blows the tree.”');
+  const [playedWords, setPlayedWords] = useState<Set<string>>(() => new Set());
+  const [status, setStatus] = useState('Say a word or make a silly recipe.');
   const resetTimerRef = useRef<number | null>(null);
+  const listeningTimerRef = useRef<number | null>(null);
 
   useEffect(() => () => {
     if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+    if (listeningTimerRef.current !== null) window.clearTimeout(listeningTimerRef.current);
   }, []);
+
+  const markWordsPlayed = (phrase: string) => {
+    const lowerCasePhrase = phrase.toLowerCase();
+    const foundWords = windWords.filter(({ word }) => new RegExp(`\\b${word}\\b`).test(lowerCasePhrase));
+    if (foundWords.length) setPlayedWords((current) => new Set([...current, ...foundWords.map(({ word }) => word)]));
+    return foundWords.map(({ word }) => word);
+  };
 
   const playScene = () => {
     if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
@@ -936,24 +955,34 @@ function WindScene() {
     resetTimerRef.current = window.setTimeout(() => setIsBlowing(false), 4700);
   };
 
-  const listenForSentence = () => {
+  const listenForRecipe = () => {
     const speechWindow = window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor };
     const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (!Recognition) {
-      setStatus('Voice recognition is not available here. Use “Play the scene” instead.');
+      setStatus('Voice recognition is not available here. Choose a word card or play the canvas instead.');
       return;
     }
     const recognition = new Recognition();
     recognition.lang = 'en-US';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.onstart = () => { setIsListening(true); setStatus('Listening… say “The wind blows the tree.”'); };
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onstart = () => {
+      setIsListening(true);
+      setStatus('Listening… make a silly recipe with any words.');
+      listeningTimerRef.current = window.setTimeout(() => recognition.stop(), 8000);
+    };
     recognition.onerror = () => { setIsListening(false); setStatus('I could not hear that. Try the sentence again, or play the scene.'); };
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      if (listeningTimerRef.current !== null) window.clearTimeout(listeningTimerRef.current);
+      listeningTimerRef.current = null;
+      setIsListening(false);
+    };
     recognition.onresult = (event) => {
       const heard = Array.from({ length: event.results.length }, (_, index) => event.results[index]?.[0]?.transcript ?? '').join(' ').toLowerCase();
+      const found = markWordsPlayed(heard);
       if (/\bwind\b/.test(heard) && /\bblows?\b/.test(heard) && /\btree\b/.test(heard)) playScene();
-      else setStatus(`I heard “${heard}”. Try: “The wind blows the tree.”`);
+      else if (found.length) setStatus(`Recipe heard: ${found.join(' + ')}.`);
+      else setStatus(`I heard “${heard}”. Try one of the word cards.`);
     };
     recognition.start();
   };
@@ -967,29 +996,28 @@ function WindScene() {
         </header>
         <section className="mb-7 max-w-3xl">
           <p className="mono-label mb-2 text-secondary">first scene / wind</p>
-          <h1 className="text-[clamp(3rem,8vw,6.4rem)] font-black leading-[.88] tracking-[-.08em]">Can the wind<br /><span className="text-secondary">move the tree?</span></h1>
-          <p className="mt-5 max-w-xl text-base font-semibold leading-relaxed text-muted-foreground">Listen to the words, then say the sentence and watch the little tree react.</p>
+          <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[clamp(3rem,8vw,6.4rem)] font-black leading-[.88] tracking-[-.08em]">Your voice<br /><span className="text-secondary">moves nature.</span></h1><p className="mt-5 max-w-xl text-base font-semibold leading-relaxed text-muted-foreground">Try any words together. The canvas is ready for your silly recipe.</p></div><div className="rotate-[-4deg] rounded-[16px] bg-[#ffd248] px-5 py-3 text-center text-primary shadow-sm"><strong className="block text-2xl leading-none">{playedWords.size}</strong><span className="text-xs font-black">words played</span></div></div>
         </section>
         <section className="grid flex-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="paper-shadow rounded-[28px] bg-[#fff8e8] p-5 sm:p-6">
             <p className="mono-label text-primary">word garden</p>
             <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-1">
-              {windWords.map(({ word, meaning, icon: Icon }) => (
+              {windWords.map(({ word, type, icon: Icon }) => (
                 <button key={word} type="button" onClick={() => {
                   window.speechSynthesis?.cancel();
                   const utterance = new SpeechSynthesisUtterance(word); utterance.lang = 'en-US'; utterance.rate = 0.78; window.speechSynthesis?.speak(utterance);
-                  setStatus(`Listen: ${word}.`);
-                }} className="flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm transition-transform hover:-translate-y-0.5">
-                  <span>{word} <span className="ml-1 text-xs text-muted-foreground">{meaning}</span></span><Icon size={16} className="text-secondary" />
+                  markWordsPlayed(word); setStatus(`Listen: ${word}.`);
+                }} className={`flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm transition-transform hover:-translate-y-0.5 ${playedWords.has(word) ? 'ring-2 ring-secondary' : ''}`}>
+                  <span className="capitalize">{word} <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-black ${wordTypeStyles[type]}`}>{type}</span></span><Icon size={16} className="text-secondary" />
                 </button>
               ))}
             </div>
           </aside>
           <div className="paper-shadow canvas-grid flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4">
-            <div className="relative min-h-[330px] flex-1"><WindCanvas isBlowing={isBlowing} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">watercolor field</span></div>
+            <div className="relative min-h-[330px] flex-1"><WindCanvas isBlowing={isBlowing} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div>
             <div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between">
-              <div><p className="font-black">The wind blows the tree.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
-              <div className="flex shrink-0 gap-2"><button type="button" onClick={listenForSentence} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Listening…' : 'Speak'}</button><button type="button" onClick={playScene} className="min-h-11 rounded-full border-2 border-sidebar-foreground/20 bg-card px-4 text-sm font-black text-foreground">Play the scene</button></div>
+              <div><p className="font-black">Make a silly recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
+              <div className="flex shrink-0 gap-2"><button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Listening…' : 'Speak'}</button><button type="button" onClick={playScene} className="min-h-11 rounded-full border-2 border-sidebar-foreground/20 bg-card px-4 text-sm font-black text-foreground">Play the scene</button></div>
             </div>
           </div>
         </section>
