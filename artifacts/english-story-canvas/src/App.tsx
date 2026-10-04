@@ -898,7 +898,7 @@ function WindCanvas({ activeWords, persistentWords, weatherWords, triggeredWords
           canvas.translate(umbrellaX + (umbrellaInTornado ? Math.sin(sceneElapsed * 0.35) * 18 : 0), umbrellaY - umbrellaLift);
           // The umbrella spins only when it is the thing being blown.
           canvas.rotate(umbrellaRotation + (umbrellaInTornado ? sceneElapsed * 0.18 : umbrellaFlying ? Math.sin(sceneElapsed * 0.15) * 0.15 : 0) + nounJiggle * 0.018);
-          if (umbrellaFlying) {
+          if (umbrellaFlying && !umbrellaInTornado) {
             canvas.fill('#fffdf7'); canvas.stroke('#7d99ad'); canvas.strokeWeight(2);
             canvas.ellipse(-70, -20, 54, 22); canvas.ellipse(70, -20, 54, 22); canvas.noStroke();
           }
@@ -1013,7 +1013,8 @@ function WindCanvas({ activeWords, persistentWords, weatherWords, triggeredWords
           }
         }
         if (tornado) {
-          const tornadoX = width * (0.18 + 0.52 * Math.min(1, sceneElapsed / 42));
+          const tornadoTargetX = umbrellaFlying ? 0.35 : 0.7;
+          const tornadoX = width * (0.18 + (tornadoTargetX - 0.18) * Math.min(1, sceneElapsed / 42));
           const tornadoY = height * 0.8;
           canvas.noFill(); canvas.stroke('#6f94ab'); canvas.strokeWeight(5);
           for (let ring = 0; ring < 8; ring += 1) {
@@ -1035,13 +1036,13 @@ function WindCanvas({ activeWords, persistentWords, weatherWords, triggeredWords
 
 const windWords = [
   { word: 'wind', type: 'noun', icon: Wind },
-  { word: 'blow', type: 'verb', icon: Wind },
   { word: 'umbrella', type: 'noun', icon: Umbrella },
   { word: 'tree', type: 'noun', icon: Leaf },
+  { word: 'blow', type: 'verb', icon: Wind },
   { word: 'fly', type: 'verb', icon: Bird },
   { word: 'softly', type: 'adverb', icon: Cloud },
-  { word: 'heavily', type: 'adverb', icon: CloudRain },
   { word: 'strongly', type: 'adverb', icon: Sparkles },
+  { word: 'heavily', type: 'adverb', icon: CloudRain },
 ] as const;
 
 const wordTypeStyles = {
