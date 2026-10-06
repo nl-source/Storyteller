@@ -27,6 +27,7 @@ import {
   RotateCcw,
   Sparkles,
   Sun,
+  Umbrella,
   Volume2,
   Waves,
   Wind,
@@ -786,6 +787,425 @@ function NatureCanvas({ action }: { action: NatureAction }) {
       aria-label="Garden scene with clouds and a tree that move when you blow"
     />
   );
+}
+
+function WindCanvas({ activeWords, persistentWords, weatherWords, triggeredWords, interactionId, recipe }: { activeWords: string[]; persistentWords: string[]; weatherWords: string[]; triggeredWords: string[]; interactionId: number; recipe: string }) {
+  const holderRef = useRef<HTMLDivElement>(null);
+  const activeWordsRef = useRef(activeWords);
+  const triggeredWordsRef = useRef(triggeredWords);
+  const interactionIdRef = useRef(interactionId);
+  const recipeRef = useRef(recipe);
+  const persistentWordsRef = useRef(persistentWords);
+  const weatherWordsRef = useRef(weatherWords);
+  activeWordsRef.current = activeWords;
+  triggeredWordsRef.current = triggeredWords;
+  interactionIdRef.current = interactionId;
+  recipeRef.current = recipe;
+  persistentWordsRef.current = persistentWords;
+  weatherWordsRef.current = weatherWords;
+
+  useEffect(() => {
+    if (!holderRef.current) return;
+    const sketch = (canvas: p5) => {
+      let width = 620;
+      let height = 430;
+      let gustStart = -1;
+      let wasBlowing = false;
+      let lastInteractionId = interactionId;
+      let nounJiggleStart = -1000;
+      let sceneStart = 0;
+
+      const resize = () => {
+        const box = holderRef.current?.getBoundingClientRect();
+        width = Math.max(300, Math.floor(box?.width ?? 620));
+        height = Math.max(330, Math.min(470, Math.floor(width * 0.7)));
+        canvas.resizeCanvas(width, height);
+      };
+
+      canvas.setup = () => {
+        const box = holderRef.current?.getBoundingClientRect();
+        width = Math.max(300, Math.floor(box?.width ?? 620));
+        height = Math.max(330, Math.min(470, Math.floor(width * 0.7)));
+        canvas.createCanvas(width, height).parent(holderRef.current as HTMLElement);
+        canvas.frameRate(30);
+      };
+      canvas.windowResized = resize;
+
+      canvas.draw = () => {
+        const currentWords = [...new Set([...activeWordsRef.current, ...weatherWordsRef.current])];
+        const blowing = currentWords.includes('wind') || activeWordsRef.current.includes('blow');
+        const showUmbrella = activeWordsRef.current.includes('umbrella') || persistentWordsRef.current.includes('umbrella');
+        const hasTree = activeWordsRef.current.includes('tree');
+        const hasFly = activeWordsRef.current.includes('fly');
+        const softly = currentWords.includes('softly');
+        const strongly = currentWords.includes('strongly');
+        const heavily = currentWords.includes('heavily');
+        const recipeWords = recipeRef.current.match(/\b(?:wind|umbrella|tree|blows?)\b/g) ?? [];
+        const blowIndex = recipeWords.findIndex((word) => word === 'blow' || word === 'blows');
+        // Read the noun on either side of "blows", rather than guessing from every word heard.
+        const blower = blowIndex > 0 ? recipeWords[blowIndex - 1] : undefined;
+        const target = blowIndex >= 0 ? recipeWords[blowIndex + 1] : undefined;
+        const tornado = heavily && weatherWordsRef.current.includes('wind');
+        const treeFlying = /\btree\s+flies?\b/.test(recipeRef.current) || (tornado && hasTree);
+        const umbrellaFlying = /\bumbrella\s+flies?\b/.test(recipeRef.current);
+        const treeHasWings = treeFlying && !tornado;
+        if (interactionIdRef.current !== lastInteractionId) {
+          lastInteractionId = interactionIdRef.current;
+          sceneStart = canvas.frameCount;
+          if (triggeredWordsRef.current.some((word) => word === 'tree' || word === 'umbrella')) nounJiggleStart = canvas.frameCount;
+        }
+        if (blowing && !wasBlowing) gustStart = canvas.frameCount;
+        wasBlowing = blowing;
+        const elapsed = gustStart < 0 ? 0 : canvas.frameCount - gustStart;
+        const sceneElapsed = canvas.frameCount - sceneStart;
+        const gustPower = softly ? 0.16 : strongly ? 2.8 : heavily ? 3.2 : 1;
+        const gust = blowing ? Math.min(1, elapsed / 20) * gustPower : 0;
+        const nounJiggleAge = canvas.frameCount - nounJiggleStart;
+        const nounJiggle = nounJiggleAge >= 0 && nounJiggleAge < 32 ? Math.sin(nounJiggleAge * 0.75) * 7 * (1 - nounJiggleAge / 32) : 0;
+        // Only the leaves dance: the trunk stays rooted in the ground.
+        const treeReceivesWind = target === 'tree' || (!target && blowing);
+        const leafJuggle = (treeReceivesWind ? Math.sin(elapsed * 0.26) * 8 * gust : 0) + nounJiggle;
+        const treeLift = treeFlying ? Math.min(height * 1.25, Math.max(0, sceneElapsed - 14) * (tornado ? 2.6 : 3.8)) : 0;
+
+        // A quiet watercolor-paper base keeps the scene readable before it moves.
+        canvas.background('#fffaf0');
+        canvas.noStroke();
+        canvas.fill('#bce8f3');
+        canvas.rect(0, 0, width, height * 0.72);
+        canvas.fill('#e7f6ee');
+        canvas.ellipse(width * 0.22, height * 0.84, width * 0.72, height * 0.39);
+        canvas.fill('#9bd57d');
+        canvas.ellipse(width * 0.78, height * 0.86, width * 0.9, height * 0.44);
+        canvas.fill('#79c66e');
+        canvas.rect(0, height * 0.84, width, height * 0.16);
+
+        canvas.fill('#fff4a1');
+        canvas.circle(width * 0.14, height * 0.16, 52);
+        canvas.fill('#fffbd2');
+        canvas.circle(width * 0.14, height * 0.16, 40);
+
+        if (showUmbrella) {
+          const umbrellaX = width * 0.35;
+          const umbrellaY = height * 0.68;
+          const umbrellaLift = umbrellaFlying ? Math.min(height * 1.2, Math.max(0, sceneElapsed - 10) * 3.8) : 0;
+          const umbrellaInTornado = umbrellaFlying && tornado;
+          const umbrellaTargeted = target === 'umbrella' || (!target && blowing && !hasTree);
+          const umbrellaFlipped = umbrellaTargeted && (strongly || heavily);
+          const umbrellaRotation = umbrellaTargeted
+            ? heavily ? elapsed * 0.25 : strongly ? Math.sin(elapsed * 0.3) * 0.15 : Math.sin(elapsed * 0.25) * 0.12
+            : 0;
+          canvas.push();
+          canvas.translate(umbrellaX + (umbrellaInTornado ? Math.sin(sceneElapsed * 0.35) * 18 : 0), umbrellaY - umbrellaLift);
+          // The umbrella spins only when it is the thing being blown.
+          canvas.rotate(umbrellaRotation + (umbrellaInTornado ? sceneElapsed * 0.18 : umbrellaFlying ? Math.sin(sceneElapsed * 0.15) * 0.15 : 0) + nounJiggle * 0.018);
+          if (umbrellaFlying && !umbrellaInTornado) {
+            canvas.fill('#fffdf7'); canvas.stroke('#7d99ad'); canvas.strokeWeight(2);
+            canvas.ellipse(-70, -20, 54, 22); canvas.ellipse(70, -20, 54, 22); canvas.noStroke();
+          }
+          canvas.stroke('#5b7893');
+          canvas.strokeWeight(5);
+          canvas.line(0, -75, 0, 40);
+          canvas.noFill();
+          canvas.arc(10, 37, 18, 18, 0, canvas.PI);
+          canvas.noStroke();
+          canvas.fill('#f38f75');
+          canvas.arc(0, -75, 120, 74, umbrellaFlipped ? 0 : canvas.PI, umbrellaFlipped ? canvas.PI : canvas.TWO_PI);
+          canvas.fill('#ffd76a');
+          canvas.arc(0, -75, 40, 74, umbrellaFlipped ? 0 : canvas.PI, umbrellaFlipped ? canvas.PI : canvas.TWO_PI);
+          if (umbrellaFlipped) {
+            canvas.stroke('#c46657'); canvas.strokeWeight(2);
+            canvas.line(0, -75, -52, -63); canvas.line(0, -75, 52, -63); canvas.noStroke();
+          }
+          if (blowing || umbrellaFlying) {
+            canvas.fill('#253d4d');
+            canvas.circle(-17, -68, 6); canvas.circle(17, -68, 6);
+            canvas.noFill(); canvas.stroke('#253d4d'); canvas.strokeWeight(2.5);
+            if (blower === 'umbrella') canvas.ellipse(20, -55, 13, 16);
+            else canvas.ellipse(0, -55, 13, 16);
+            canvas.noStroke();
+          }
+          canvas.pop();
+        }
+
+        const treeX = width * 0.7;
+        const treeY = height * 0.78;
+        canvas.push();
+        canvas.translate(treeX + (tornado ? Math.sin(elapsed * 0.35) * 15 : 0), treeY - treeLift);
+        if (treeFlying) canvas.rotate((tornado ? sceneElapsed * 0.15 : Math.sin(sceneElapsed * 0.15) * 0.13));
+        if (treeHasWings) {
+          canvas.fill('#fffdf7'); canvas.stroke('#7d99ad'); canvas.strokeWeight(2);
+          canvas.ellipse(-66, -height * 0.38, 62, 25); canvas.ellipse(72, -height * 0.38, 62, 25);
+          canvas.noStroke();
+        }
+        canvas.fill('#8d5a3a');
+        canvas.beginShape();
+        canvas.vertex(-20, height * 0.14);
+        canvas.vertex(-12, -height * 0.34);
+        canvas.vertex(-48, -height * 0.49);
+        canvas.vertex(-42, -height * 0.54);
+        canvas.vertex(-7, -height * 0.39);
+        canvas.vertex(7, -height * 0.62);
+        canvas.vertex(16, -height * 0.38);
+        canvas.vertex(48, -height * 0.52);
+        canvas.vertex(55, -height * 0.47);
+        canvas.vertex(20, -height * 0.3);
+        canvas.vertex(25, height * 0.14);
+        canvas.endShape(canvas.CLOSE);
+        const canopy = [[-39, -height * 0.54, 92, 83, '#54b878'], [13, -height * 0.61, 108, 96, '#40aa70'], [58, -height * 0.48, 84, 77, '#61bf7c'], [8, -height * 0.4, 114, 81, '#2e9d65']] as const;
+        canopy.forEach(([x, y, w, h, color], index) => {
+          canvas.fill(color);
+          canvas.ellipse(x + (index % 2 ? leafJuggle * 0.45 : -leafJuggle * 0.35), y + Math.sin(elapsed * 0.28 + index) * leafJuggle, w, h);
+        });
+        // A tree can join the recipe by puffing air, while keeping its trunk rooted unless it flies.
+        if (blowing || treeFlying) {
+          canvas.fill('#253d4d');
+          canvas.circle(8, -height * 0.48, 7);
+          canvas.circle(31, -height * 0.48, 7);
+          canvas.noFill();
+          canvas.stroke('#253d4d');
+          canvas.strokeWeight(3);
+          if (blower === 'tree') {
+            // A round, left-facing "whooo" mouth makes the tree the obvious speaker.
+            canvas.ellipse(-2, -height * 0.42, 15, 18);
+          }
+          else if (blowing) canvas.ellipse(20, -height * 0.41, 14, 18);
+          else canvas.arc(20, -height * 0.41, 22, 17, 0, canvas.PI);
+          canvas.noStroke();
+        }
+        canvas.pop();
+
+        if (blowing) {
+          for (let index = 0; index < 7; index += 1) {
+            const x = ((elapsed * 7 + index * width / 6) % (width + 130)) - 70;
+            const y = height * (0.25 + (index % 4) * 0.11);
+            canvas.noFill();
+            canvas.stroke('#fffdf7');
+            canvas.strokeWeight(4);
+            canvas.arc(x, y, 74, 24, canvas.PI * 1.08, canvas.PI * 1.9);
+            canvas.noStroke();
+          }
+          for (let index = 0; index < 10; index += 1) {
+            const x = treeX + Math.sin(elapsed * 0.18 + index * 2.1) * (36 + index * 3);
+            const y = treeY - height * (0.42 + (index % 3) * 0.06) + Math.cos(elapsed * 0.24 + index) * 22;
+            canvas.push(); canvas.translate(x, y); canvas.rotate(elapsed * 0.16 + index);
+            canvas.fill(index % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 15, 7); canvas.pop();
+          }
+          if (blower === 'umbrella' && target === 'tree' && heavily) {
+            for (let leaf = 0; leaf < 12; leaf += 1) {
+              const x = treeX + 45 + ((elapsed * 5 + leaf * 37) % (width * 0.28));
+              const y = treeY - height * 0.48 + leaf * 13 + Math.sin(elapsed * 0.24 + leaf) * 18;
+              canvas.push(); canvas.translate(x, y); canvas.rotate(elapsed * 0.18 + leaf);
+              canvas.fill(leaf % 2 ? '#e99b46' : '#f4c94e'); canvas.ellipse(0, 0, 17, 8); canvas.pop();
+            }
+          }
+          // Air starts at the named blower and travels toward the named target.
+          if (blower && target && (blower === 'umbrella' || blower === 'tree')) {
+            const fromX = blower === 'umbrella' ? width * 0.41 : width * 0.59;
+            const toX = target === 'umbrella' ? width * 0.43 : target === 'tree' ? width * 0.61 : blower === 'umbrella' ? width * 0.9 : width * 0.1;
+            for (let puff = 0; puff < 4; puff += 1) {
+              const progress = (puff + ((elapsed * 0.025) % 1)) / 4;
+              const x = fromX + (toX - fromX) * progress;
+              const curve = Math.sin(progress * canvas.PI) * -18;
+              canvas.noFill(); canvas.stroke('#fffdf7'); canvas.strokeWeight(5);
+              canvas.arc(x, height * 0.5 + curve, 25 + puff * 4, 13, canvas.PI * 1.08, canvas.PI * 1.9);
+              canvas.noStroke();
+            }
+          }
+        }
+        if (tornado) {
+          const tornadoTargetX = umbrellaFlying ? 0.35 : 0.7;
+          const tornadoX = width * (0.18 + (tornadoTargetX - 0.18) * Math.min(1, sceneElapsed / 42));
+          const tornadoY = height * 0.8;
+          canvas.noFill(); canvas.stroke('#6f94ab'); canvas.strokeWeight(5);
+          for (let ring = 0; ring < 8; ring += 1) {
+            const y = tornadoY - ring * 19;
+            const diameter = 24 + ring * 15;
+            canvas.arc(tornadoX, y, diameter, 13 + ring * 1.5, elapsed * 0.24 + ring * 0.42, elapsed * 0.24 + ring * 0.42 + canvas.PI * 1.72);
+          }
+          canvas.fill('#a5c3d3'); canvas.ellipse(tornadoX, tornadoY - 145, 120, 35);
+          canvas.noStroke();
+        }
+      };
+    };
+    const instance = new p5(sketch);
+    return () => instance.remove();
+  }, []);
+
+  return <div ref={holderRef} className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" role="img" aria-label="Watercolor field with an animated tree in the wind" />;
+}
+
+const windWords = [
+  { word: 'wind', type: 'noun', icon: Wind },
+  { word: 'umbrella', type: 'noun', icon: Umbrella },
+  { word: 'tree', type: 'noun', icon: Leaf },
+  { word: 'blow', type: 'verb', icon: Wind },
+  { word: 'fly', type: 'verb', icon: Bird },
+  { word: 'softly', type: 'adverb', icon: Cloud },
+  { word: 'strongly', type: 'adverb', icon: Sparkles },
+  { word: 'heavily', type: 'adverb', icon: CloudRain },
+] as const;
+
+const wordTypeStyles = {
+  noun: 'bg-sky-100 text-sky-700',
+  verb: 'bg-amber-100 text-amber-800',
+  adverb: 'bg-violet-100 text-violet-700',
+} as const;
+
+function WindScene() {
+  const [isListening, setIsListening] = useState(false);
+  const [playedWords, setPlayedWords] = useState<Set<string>>(() => new Set());
+  const [activeWords, setActiveWords] = useState<string[]>([]);
+  const [triggeredWords, setTriggeredWords] = useState<string[]>([]);
+  const [interactionId, setInteractionId] = useState(0);
+  const [recipe, setRecipe] = useState('');
+  const [persistentWords, setPersistentWords] = useState<string[]>([]);
+  const [weatherWords, setWeatherWords] = useState<string[]>([]);
+  const [sceneHistory, setSceneHistory] = useState<Array<{ words: string[]; persistent: string[]; weather: string[]; recipe: string }>>([]);
+  const [status, setStatus] = useState('Say a word or make a silly recipe.');
+  const recognitionRef = useRef<SpeechLike | null>(null);
+
+  useEffect(() => () => recognitionRef.current?.stop(), []);
+
+  const markWordsPlayed = (phrase: string) => {
+    const lowerCasePhrase = phrase.toLowerCase();
+    const foundWords = windWords.filter(({ word }) => word === 'blow'
+      ? /\bblows?\b/.test(lowerCasePhrase)
+      : new RegExp(`\\b${word}\\b`).test(lowerCasePhrase));
+    if (foundWords.length) setPlayedWords((current) => new Set([...current, ...foundWords.map(({ word }) => word)]));
+    return foundWords.map(({ word }) => word);
+  };
+
+  const applyWordsToCanvas = (words: string[], replaceCanvas = false, heardRecipe = '') => {
+    if (!words.length) return;
+    setSceneHistory((current) => [...current, { words: activeWords, persistent: persistentWords, weather: weatherWords, recipe }]);
+    setActiveWords((current) => replaceCanvas ? words : [...new Set([...current, ...words])]);
+    const newNouns = words.filter((word) => word === 'umbrella');
+    if (newNouns.length) setPersistentWords((current) => [...new Set([...current, ...newNouns])]);
+    if (words.includes('wind') && (words.includes('softly') || words.includes('strongly') || words.includes('heavily'))) setWeatherWords(words.filter((word) => word === 'wind' || word === 'softly' || word === 'strongly' || word === 'heavily'));
+    setTriggeredWords(words);
+    setInteractionId((current) => current + 1);
+    if (heardRecipe) setRecipe(heardRecipe);
+  };
+
+  const clearCanvas = () => {
+    setSceneHistory((current) => [...current, { words: activeWords, persistent: persistentWords, weather: weatherWords, recipe }]);
+    setActiveWords([]); setPersistentWords([]); setWeatherWords([]); setTriggeredWords([]); setRecipe(''); setInteractionId((current) => current + 1);
+    setStatus('Canvas cleared. The tree, sky, and land are ready.');
+  };
+
+  const restorePreviousScene = () => {
+    const previous = sceneHistory[sceneHistory.length - 1];
+    if (!previous) { setStatus('There is no previous scene yet.'); return; }
+    setActiveWords(previous.words); setPersistentWords(previous.persistent); setWeatherWords(previous.weather); setRecipe(previous.recipe);
+    setTriggeredWords(previous.words); setInteractionId((current) => current + 1);
+    setSceneHistory((current) => current.slice(0, -1)); setStatus('Previous scene restored.');
+  };
+
+  const listenForRecipe = () => {
+    if (isListening) { recognitionRef.current?.stop(); return; }
+    const speechWindow = window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor };
+    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setStatus('Voice recognition is not available here. Choose a word card or play the canvas instead.');
+      return;
+    }
+    const recognition = new Recognition();
+    recognitionRef.current = recognition;
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onstart = () => {
+      setIsListening(true);
+      setStatus('Listening… make a silly recipe with any words.');
+    };
+    recognition.onerror = () => { setIsListening(false); setStatus('I could not hear that. Try the sentence again, or play the scene.'); };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setIsListening(false);
+    };
+    recognition.onresult = (event) => {
+      const latestResult = event.results[event.results.length - 1];
+      if (!latestResult?.isFinal) return;
+      // Each completed utterance is a new recipe, so its adverb replaces the last one.
+      const heard = latestResult[0]?.transcript?.toLowerCase() ?? '';
+      const found = markWordsPlayed(heard);
+      if (found.length) {
+        applyWordsToCanvas(found, true, heard);
+        setStatus(`Recipe heard: ${found.join(' + ')}.`);
+      }
+      else setStatus(`I heard “${heard}”. Try one of the word cards.`);
+    };
+    recognition.start();
+  };
+
+  return (
+    <main className="story-shell text-foreground">
+      <div className="mx-auto flex min-h-[100dvh] max-w-[1280px] flex-col px-4 pb-8 sm:px-8 lg:px-12">
+        <header className="flex items-center justify-between py-5 sm:py-7">
+          <Link href="/" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold"><ArrowRight className="rotate-180" size={16} /> Chapters</Link>
+          <p className="mono-label text-muted-foreground">moving nature · 01 / 04</p>
+        </header>
+        <section className="mb-7 max-w-3xl">
+          <p className="mono-label mb-2 text-secondary">first scene / wind</p>
+          <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[clamp(3rem,8vw,6.4rem)] font-black leading-[.88] tracking-[-.08em]">Your voice<br /><span className="text-secondary">moves nature.</span></h1><p className="mt-5 max-w-xl text-base font-semibold leading-relaxed text-muted-foreground">Try any words together. The canvas is ready for your silly recipe.</p></div><div className="rotate-[-4deg] rounded-[16px] bg-[#ffd248] px-5 py-3 text-center text-primary shadow-sm"><strong className="block text-2xl leading-none">{playedWords.size}</strong><span className="text-xs font-black">words played</span></div></div>
+        </section>
+        <section className="grid flex-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="paper-shadow rounded-[28px] bg-[#fff8e8] p-5 sm:p-6">
+            <p className="mono-label text-primary">word garden</p>
+            <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-1">
+              {windWords.map(({ word, type, icon: Icon }) => (
+                <button key={word} type="button" onClick={() => {
+                  window.speechSynthesis?.cancel();
+                  const utterance = new SpeechSynthesisUtterance(word); utterance.lang = 'en-US'; utterance.rate = 0.78; window.speechSynthesis?.speak(utterance);
+                  markWordsPlayed(word); applyWordsToCanvas([word]); setStatus(`Listen: ${word}.`);
+                }} className={`flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm transition-transform hover:-translate-y-0.5 ${playedWords.has(word) ? 'ring-2 ring-secondary' : ''}`}>
+                  <span className="capitalize">{word} <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-black ${wordTypeStyles[type]}`}>{type}</span></span><Icon size={16} className="text-secondary" />
+                </button>
+              ))}
+            </div>
+          </aside>
+          <div className="paper-shadow canvas-grid flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4">
+            <div className="flex min-h-[330px] flex-1 flex-col gap-3 lg:flex-row"><div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} persistentWords={persistentWords} weatherWords={weatherWords} triggeredWords={triggeredWords} interactionId={interactionId} recipe={recipe} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div><aside className="rounded-[20px] bg-[#fff8e8] p-4 lg:w-52"><p className="mono-label text-primary">what I just heard…</p><p className="mt-3 text-sm font-bold leading-relaxed text-primary">{recipe || 'Say a recipe and I will write it here.'}</p><div className="mt-5 grid gap-2"><button type="button" onClick={restorePreviousScene} className="rounded-full border-2 border-primary bg-card px-3 py-2 text-xs font-black text-primary">Previous scene</button><button type="button" onClick={clearCanvas} className="rounded-full bg-primary px-3 py-2 text-xs font-black text-primary-foreground">Clear canvas</button></div></aside></div>
+            <div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between">
+              <div><p className="font-black">Make a silly recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
+              <button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Stop listening' : 'Speak'}</button>
+            </div>
+          </div>
+        </section>
+        <footer className="mt-7 flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>Wind is the first of four Moving Nature scenes.</span><Link href="/moving-nature/rain" className="rounded-full bg-secondary px-4 py-2 font-black text-secondary-foreground">Next: Rain <ArrowRight className="inline" size={14}/></Link></footer>
+      </div>
+    </main>
+  );
+}
+
+const rainWords = [
+  { word: 'rain', type: 'noun', icon: CloudRain }, { word: 'umbrella', type: 'noun', icon: Umbrella }, { word: 'tree', type: 'noun', icon: Leaf }, { word: 'puddle', type: 'noun', icon: Cloud }, { word: 'alice', type: 'noun', icon: Bot },
+  { word: 'fall', type: 'verb', icon: ArrowDown }, { word: 'splash', type: 'verb', icon: Sparkles }, { word: 'softly', type: 'adverb', icon: Cloud }, { word: 'heavily', type: 'adverb', icon: CloudRain },
+] as const;
+
+function RainCanvas({ words }: { words: string[] }) {
+  const holderRef = useRef<HTMLDivElement>(null); const wordsRef = useRef(words); wordsRef.current = words;
+  useEffect(() => { if (!holderRef.current) return; const sketch = (c: p5) => { let w = 620; let h = 430; let rainStart = 0;
+    const size = () => { const box = holderRef.current?.getBoundingClientRect(); w = Math.max(300, Math.floor(box?.width ?? 620)); h = Math.max(330, Math.floor(w * .7)); c.resizeCanvas(w, h); };
+    c.setup = () => { c.createCanvas(w, h).parent(holderRef.current as HTMLElement); size(); c.frameRate(30); }; c.windowResized = size;
+    c.draw = () => { const ws = wordsRef.current; const raining = ws.includes('rain') || ws.includes('fall'); const heavy = ws.includes('heavily'); const umbrella = ws.includes('umbrella'); const alice = ws.includes('alice'); const splash = ws.includes('splash'); if (raining && !rainStart) rainStart = c.frameCount; if (!raining) rainStart = 0; const elapsed = c.frameCount - rainStart;
+      c.background(heavy ? '#8098a5' : '#b9dbe5'); c.noStroke(); c.fill('#8acb72'); c.rect(0,h*.76,w,h*.24); c.fill('#6e9c51'); c.rect(w*.65,h*.35,28,h*.42); c.fill('#4ea96a'); c.ellipse(w*.66,h*.3,140,120);
+      if (raining) { c.stroke(heavy ? '#d7ecf7' : '#eef8fb'); c.strokeWeight(heavy ? 4 : 2); for(let i=0;i<(heavy?75:34);i++){const y=(i*31+elapsed*(heavy?14:5))%(h*.77); const x=(i*47-elapsed*(heavy?7:2)+y*.22+w)%w; c.line(x,y,x-(heavy?10:5),y+(heavy?22:12));} c.noStroke(); }
+      const puddle = raining && elapsed > 90 || ws.includes('puddle'); if(puddle){c.fill('#4f9fbd'); c.ellipse(w*.43,h*.77,150,31); c.noFill(); c.stroke('#d9f5ff'); c.ellipse(w*.43,h*.77,90+Math.sin(c.frameCount*.2)*18,13); c.noStroke(); if(splash){c.fill('#d9f5ff'); for(let i=0;i<8;i++)c.circle(w*.43+Math.cos(i)*55,h*.71+Math.sin(i)*24,9); c.fill('#fff');c.ellipse(w*.53,h*.61,75,42);c.fill('#225');c.textSize(15);c.textAlign(c.CENTER);c.text('Splash!',w*.53,h*.616);} }
+      if(umbrella){c.stroke('#425f7a');c.strokeWeight(5);c.line(w*.25,h*.56,w*.25,h*.75);c.noStroke();c.fill('#f38f75');c.arc(w*.25,h*.56,105,62,c.PI,c.TWO_PI);c.fill('#ffd76a');c.arc(w*.25,h*.56,34,62,c.PI,c.TWO_PI);}
+      if(alice){const x=w*.35; const jumping=splash&&puddle; c.stroke('#293d4e');c.strokeWeight(4);c.circle(x,h*.64-(jumping?45:0),18);c.line(x,h*.65-(jumping?45:0),x,h*.73-(jumping?45:0));c.line(x,h*.69-(jumping?45:0),x-20,h*.72-(jumping?45:0));c.line(x,h*.69-(jumping?45:0),x+20,h*.72-(jumping?45:0));c.line(x,h*.73-(jumping?45:0),x-14,h*.77);c.line(x,h*.73-(jumping?45:0),x+14,h*.77);c.noStroke();}
+    }; }; const instance = new p5(sketch); return () => instance.remove(); }, []); return <div ref={holderRef} className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" />;
+}
+
+function RainScene() {
+  const [words, setWords] = useState<string[]>([]); const [recipe, setRecipe] = useState(''); const [status, setStatus] = useState('Say a rainy recipe.'); const [listening, setListening] = useState(false);
+  const [history, setHistory] = useState<string[][]>([]); const recognitionRef = useRef<SpeechLike | null>(null); const wordsRef = useRef(words); wordsRef.current = words;
+  useEffect(() => () => recognitionRef.current?.stop(), []);
+  const apply = (next: string[], heard = '') => { setHistory(current => [...current, words]); setWords(next); if (heard) setRecipe(heard); setStatus(heard ? `Recipe heard: ${next.join(' + ')}.` : `Rain recipe: ${next.join(' + ')}.`); };
+  const listen = () => { if (listening) { recognitionRef.current?.stop(); return; } const W = window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor }; const R = W.SpeechRecognition || W.webkitSpeechRecognition; if (!R) { setStatus('Voice recognition is not available in this browser.'); return; } const recognition = new R(); recognitionRef.current = recognition; recognition.lang = 'en-US'; recognition.continuous = true; recognition.interimResults = true; recognition.onstart = () => { setListening(true); setStatus('Listening… make a rainy recipe.'); }; recognition.onend = () => { recognitionRef.current = null; setListening(false); }; recognition.onresult = event => { const result = event.results[event.results.length - 1]; if (!result?.isFinal) return; const heard = result[0]?.transcript?.toLowerCase() ?? ''; const found = rainWords.filter(({ word }) => new RegExp(`\\b${word}\\b`).test(heard)).map(({ word }) => word); if (found.length) apply([...new Set([...wordsRef.current, ...found])], heard); else setStatus(`I heard “${heard}”. Try rain, puddle, or splash.`); }; recognition.start(); };
+  const clear = () => { setHistory(current => [...current, words]); setWords([]); setRecipe(''); setStatus('Canvas cleared.'); };
+  const previous = () => { const last = history[history.length - 1]; if (!last) { setStatus('There is no previous scene yet.'); return; } setWords(last); setHistory(current => current.slice(0, -1)); setStatus('Previous scene restored.'); };
+  return <main className="story-shell text-foreground"><div className="mx-auto flex min-h-[100dvh] max-w-[1280px] flex-col px-4 pb-8 sm:px-8 lg:px-12"><header className="flex items-center justify-between py-5 sm:py-7"><Link href="/moving-nature" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold"><ArrowRight className="rotate-180" size={16}/> Wind</Link><p className="mono-label text-muted-foreground">moving nature · 02 / 04</p></header><section className="mb-7"><p className="mono-label mb-2 text-secondary">second scene / rain</p><h1 className="text-[clamp(3rem,8vw,6.4rem)] font-black leading-[.88] tracking-[-.08em]">Your voice<br/><span className="text-secondary">makes rain.</span></h1></section><section className="grid flex-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]"><aside className="paper-shadow rounded-[28px] bg-[#fff8e8] p-5 sm:p-6"><p className="mono-label text-primary">word garden</p><div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-1">{rainWords.map(({word,type,icon:Icon})=><button key={word} onClick={()=>apply([...new Set([...words,word])], word)} className="flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm"><span className="capitalize">{word} <span className={`ml-1 rounded-full px-2 py-.5 text-[10px] ${wordTypeStyles[type]}`}>{type}</span></span><Icon size={16} className="text-secondary"/></button>)}</div></aside><div className="paper-shadow flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4"><div className="flex min-h-[330px] flex-1 flex-col gap-3 lg:flex-row"><div className="relative min-h-[330px] flex-1"><RainCanvas words={words}/><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div><aside className="rounded-[20px] bg-[#fff8e8] p-4 lg:w-52"><p className="mono-label text-primary">what I just heard…</p><p className="mt-3 text-sm font-bold leading-relaxed text-primary">{recipe || 'Say a recipe and I will write it here.'}</p><div className="mt-5 grid gap-2"><button onClick={previous} className="rounded-full border-2 border-primary bg-card px-3 py-2 text-xs font-black text-primary">Previous scene</button><button onClick={clear} className="rounded-full bg-primary px-3 py-2 text-xs font-black text-primary-foreground">Clear canvas</button></div></aside></div><div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between"><div><p className="font-black">Make a rainy recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70">{status}</p></div><button onClick={listen} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17}/>{listening ? 'Stop listening' : 'Speak'}</button></div></div></section></div></main>;
 }
 
 function MovingNature() {
@@ -1814,7 +2234,8 @@ function Router() {
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/story" component={Home} />
-        <Route path="/moving-nature" component={MovingNature} />
+        <Route path="/moving-nature" component={WindScene} />
+        <Route path="/moving-nature/rain" component={RainScene} />
         <Route path="/session-3" component={SessionThree} />
         <Route component={NotFound} />
       </Switch>
