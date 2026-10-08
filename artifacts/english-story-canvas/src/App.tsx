@@ -24,6 +24,7 @@ import {
   MicOff,
   Phone,
   PhoneOff,
+  Play,
   RotateCcw,
   Sparkles,
   Sun,
@@ -46,6 +47,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  CanvasFrame,
+  ControlDock,
+  HeardBubble,
+  KidPage,
+  MicButton,
+  PlayLayout,
+  StoryCaption,
+  TopBar,
+  WordTray,
+  type PictureWord,
+  type WordType,
+} from '@/components/kid-ui';
+import { speakWord, useSpeechWords, type HeardUtterance } from '@/hooks/use-speech-words';
+import { buildVocab, toHeardTokens, type HeardToken, type VocabEntry } from '@/lib/speech-match';
 
 const queryClient = new QueryClient();
 
@@ -64,27 +80,15 @@ type SpeechLike = {
 };
 type SpeechConstructor = new () => SpeechLike;
 
-const vocabulary: Array<{ word: Word; hint: string; color: string }> = [
-  { word: 'apple', hint: 'a red fruit', color: 'coral' },
-  { word: 'bee', hint: 'a buzzy friend', color: 'yellow' },
-  { word: 'eat', hint: 'take a silly bite', color: 'peach' },
-  { word: 'fly', hint: 'zoom in the sky', color: 'lavender' },
-];
-
-const wordAliases: Record<Word, string[]> = {
-  apple: ['apple', 'apples'],
-  bee: ['bee', 'bees', 'be', 'b'],
-  eat: ['eat', 'eats', 'eating', 'ate'],
-  fly: ['fly', 'flies', 'flying'],
-};
-
-function findWords(transcript: string): Word[] {
-  const tokens = transcript.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
-  return tokens.flatMap((token) => {
-    const match = vocabulary.find(({ word }) => wordAliases[word].includes(token));
-    return match ? [match.word] : [];
-  });
+/** What the "I heard…" bubble on the canvas shows. */
+type HeardState = { tokens: HeardToken[]; unmatched: string; message: string };
+const emptyHeard: HeardState = { tokens: [], unmatched: '', message: '' };
+function heardFrom(utterance: HeardUtterance, vocab: VocabEntry[]): HeardState {
+  return utterance.words.length
+    ? { ...emptyHeard, tokens: toHeardTokens(utterance.canonical, vocab) }
+    : { ...emptyHeard, unmatched: utterance.raw };
 }
+const typesOf = (words: PictureWord[]) => Object.fromEntries(words.map(({ word, type }) => [word, type])) as Record<string, WordType>;
 
 function sentenceForWords(words: Word[]) {
   if (!words.length) return 'Your silly story will grow here…';
@@ -126,7 +130,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         return false;
       };
       canvas.setup = () => {
-        referenceArtwork = canvas.loadImage('/yan-tree-apple.jpg');
+        referenceArtwork = canvas.loadImage(`${import.meta.env.BASE_URL}yan-tree-apple.jpg`);
         const box = holderRef.current?.getBoundingClientRect();
         w = Math.max(280, Math.floor(box?.width ?? 620));
         h = Math.max(300, Math.min(460, Math.floor(w * 0.63)));
@@ -343,65 +347,58 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
   return <div ref={holderRef} data-testid="canvas-story-world" className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" aria-label="Animated story world" role="img" />;
 }
 
-function ChapterCard({
-  number,
-  eyebrow,
-  title,
-  description,
-  href,
-  tone,
-  disabled = false,
-}: {
-  number: string;
-  eyebrow: string;
-  title: string;
-  description: string;
-  href: string;
-  tone: 'green' | 'orange';
-  disabled?: boolean;
-}) {
-  const content = (
-    <div className={`group relative flex min-h-[210px] flex-col justify-between overflow-hidden rounded-[26px] p-6 transition-transform ${disabled ? 'cursor-default opacity-70' : 'hover:-translate-y-1'} ${tone === 'green' ? 'bg-sidebar text-sidebar-foreground' : 'bg-accent text-accent-foreground'}`}>
-      <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full border-[18px] border-current opacity-15" />
-      <div className="relative flex items-start justify-between">
-        <p className="mono-label opacity-70">{number} / {eyebrow}</p>
-        {!disabled && <ArrowRight className="transition-transform group-hover:translate-x-1" size={22} />}
-      </div>
-      <div className="relative">
-        <h2 className="max-w-[360px] text-3xl font-black tracking-[-.06em]">{title}</h2>
-        <p className="mt-2 max-w-[330px] text-sm font-semibold leading-relaxed opacity-75">{description}</p>
-      </div>
-    </div>
-  );
-  return disabled ? content : <Link href={href}>{content}</Link>;
-}
+const chapters = [
+  {
+    href: '/story', number: 1, title: 'Story Canvas', zh: '故事画布', line: 'Say a word. Watch it come alive!',
+    scene: ['🌳', '🍎', '🐝'], sky: 'from-[#fff3c4] to-[#ffe08a]',
+  },
+  {
+    href: '/moving-nature', number: 2, title: 'Moving Nature', zh: '会动的大自然', line: 'Make the wind blow and the rain fall!',
+    scene: ['🌬️', '☂️', '🌧️'], sky: 'from-[#d4f0ff] to-[#a9dcf7]',
+  },
+  {
+    href: '/session-3', number: 3, title: 'Little Windows', zh: '四个小窗', line: 'Tap a window to find a surprise!',
+    scene: ['☀️', '🐦', '🌷'], sky: 'from-[#e6f7d6] to-[#bfe6a3]',
+  },
+];
 
 function Landing() {
   return (
-    <main className="story-shell text-foreground">
-      <div className="mx-auto flex min-h-[100dvh] max-w-[1200px] flex-col px-5 pb-8 sm:px-8 lg:px-12">
-        <header className="flex items-center justify-between py-6 sm:py-8">
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 rotate-[-5deg] place-items-center rounded-[14px] bg-primary text-primary-foreground soft-shadow"><BookOpen size={23} strokeWidth={2.5} /></div>
-            <div><p className="text-[17px] font-black leading-none tracking-[-.03em]">DreamOral</p><p className="mono-label mt-1 text-muted-foreground">a little book of moving pictures</p></div>
-          </div>
-          <p className="hidden text-xs font-bold text-muted-foreground sm:block">English playground · 2026</p>
-        </header>
-        <section className="flex flex-1 flex-col justify-center py-8">
-          <div className="max-w-[760px]">
-            <p className="mono-label mb-4 text-primary">a story in chapters</p>
-            <h1 className="text-[clamp(3.5rem,10vw,8rem)] font-black leading-[.85] tracking-[-.09em]">Make something<br /><span className="text-secondary">move.</span></h1>
-            <p className="mt-7 max-w-[540px] text-lg font-semibold leading-relaxed text-muted-foreground">Speak a word, watch a world appear, and follow the little accidents that happen next.</p>
-          </div>
-          <div className="mt-12 grid gap-4 sm:grid-cols-2">
-            <ChapterCard number="01" eyebrow="make a story" title="Your voice draws the world." description="Build a silly English story with a hand-painted tree, a bee, and an apple that waits for its cue." href="/story" tone="green" />
-            <ChapterCard number="02" eyebrow="moving nature" title="Everything moves in nature!" description="Tap wind and blow to hear English words and send a gust through the garden." href="/moving-nature" tone="orange" />
-            <ChapterCard number="03" eyebrow="four little scenes" title="Touch a tiny world." description="Explore four separate picture windows. Each canvas has its own surprise waiting for your tap." href="/session-3" tone="green" />
-          </div>
-        </section>
-        <footer className="flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>chapters 01, 02 &amp; 03 are ready to play</span><span>Play with a friend<br />和朋友一起玩</span></footer>
-      </div>
-    </main>
+    <KidPage theme="meadow">
+      <header className="flex items-center gap-3 py-4">
+        <span className="grid h-12 w-12 rotate-[-6deg] place-items-center rounded-[16px] bg-[#ff7657] text-2xl shadow-[0_5px_0_#d9502f]" aria-hidden="true">📖</span>
+        <p className="font-display text-2xl font-semibold text-[#2d3a4a]">DreamOral</p>
+      </header>
+      <section className="mx-auto mt-2 flex w-full max-w-4xl items-center gap-4 sm:mt-6 sm:gap-6">
+        <div className="bob grid h-24 w-24 shrink-0 place-items-center rounded-full bg-white text-6xl shadow-[0_8px_0_rgba(45,58,74,.08)] sm:h-32 sm:w-32 sm:text-7xl" aria-hidden="true">🦉</div>
+        <div className="relative rounded-[28px] bg-white px-5 py-4 shadow-[0_6px_0_rgba(45,58,74,.08)] sm:px-7 sm:py-5">
+          <span className="absolute -left-2 top-1/2 h-5 w-5 -translate-y-1/2 rotate-45 bg-white" aria-hidden="true" />
+          <p className="font-display text-2xl font-semibold leading-tight text-[#2d3a4a] sm:text-4xl">Hi! Your voice can make pictures move!</p>
+          <p className="mt-1 text-base font-bold text-[#6b7a8c] sm:text-lg">你好！用英语说一说，画面就会动起来！</p>
+        </div>
+      </section>
+      <section className="mx-auto mt-8 grid w-full max-w-5xl flex-1 content-start gap-5 sm:grid-cols-3" aria-label="Chapters">
+        {chapters.map(({ href, number, title, zh, line, scene, sky }) => (
+          <Link key={href} href={href} className="toy-button toy-white group flex flex-col overflow-hidden rounded-[30px] text-left" data-testid={`link-chapter-${number}`}>
+            <div className={`relative flex h-40 items-end justify-center gap-1 bg-gradient-to-b ${sky} pb-4 sm:h-44`}>
+              <span className="absolute left-3 top-3 grid h-10 w-10 place-items-center rounded-full bg-white font-display text-xl font-semibold text-[#e0533d]">{number}</span>
+              <span className="text-6xl transition-transform group-hover:-translate-y-1" aria-hidden="true">{scene[0]}</span>
+              <span className="mb-6 text-5xl transition-transform group-hover:-translate-y-2" aria-hidden="true">{scene[1]}</span>
+              <span className="text-5xl transition-transform group-hover:-translate-y-1" aria-hidden="true">{scene[2]}</span>
+            </div>
+            <div className="flex flex-1 items-center gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <h2 className="font-display text-2xl font-semibold leading-tight text-[#2d3a4a]">{title}</h2>
+                <p className="text-sm font-extrabold text-[#e0533d]">{zh}</p>
+                <p className="mt-1 text-sm font-bold leading-snug text-[#6b7a8c]">{line}</p>
+              </div>
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[#3fc382] text-white shadow-[0_5px_0_#26995f]" aria-hidden="true"><Play size={26} fill="currentColor" /></span>
+            </div>
+          </Link>
+        ))}
+      </section>
+      <footer className="mt-8 pb-2 text-center text-sm font-bold text-[#6b7a8c]">Play with a friend · 和朋友一起玩 👫</footer>
+    </KidPage>
   );
 }
 
@@ -545,37 +542,31 @@ function SessionThree() {
   };
 
   return (
-    <main className="story-shell text-foreground">
-      <div className="mx-auto flex min-h-[100dvh] max-w-[1200px] flex-col px-4 pb-8 sm:px-7 lg:px-10">
-        <header className="flex items-center justify-between py-5 sm:py-7">
-          <Link href="/" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold"><ArrowRight className="rotate-180" size={16} /> Chapters</Link>
-          <div className="text-right">
-            <p className="text-[17px] font-black">Four Little Scenes</p>
-            <p className="mono-label mt-1 text-muted-foreground">chapter 03 · touch & discover</p>
-          </div>
-        </header>
-        <section className="mb-7">
-          <p className="mono-label mb-2 text-primary">03 / four-window story</p>
-          <h1 className="text-[clamp(2.6rem,7vw,5.8rem)] font-black leading-[.9] tracking-[-.08em]">Every window<br /><span className="text-secondary">has a surprise.</span></h1>
-          <p className="mt-4 max-w-[620px] text-base font-semibold leading-relaxed text-muted-foreground">Tap one square at a time. Each little canvas remembers its own action.</p>
-        </section>
-        <section className="grid flex-1 gap-4 sm:grid-cols-2" aria-label="Four interactive story canvases">
-          {sessionThreeScenes.map(({ kind, title, subtitle, prompt, icon: Icon }) => (
-            <article key={kind} className="flex flex-col rounded-[26px] border-2 border-border bg-card p-3 soft-shadow sm:p-4">
-              <div className="mb-3 flex items-start justify-between px-2 pt-1">
-                <div><p className="mono-label text-primary">scene 0{sessionThreeScenes.findIndex((scene) => scene.kind === kind) + 1}</p><h2 className="mt-1 text-xl font-black">{title}</h2><p className="text-xs font-bold text-muted-foreground">{subtitle}</p></div>
-                <Icon size={24} className="text-secondary" />
-              </div>
-              <button type="button" onClick={() => activateScene(kind)} className="group flex flex-1 flex-col text-left" aria-label={prompt} data-testid={`button-session-3-${kind}`}>
-                <div className="min-h-[190px] flex-1 rounded-[20px] bg-muted p-1"><SceneCanvas kind={kind} action={actions[kind]} /></div>
-                <span className="flex items-center justify-between px-2 pt-3 text-xs font-black text-secondary"><span>{prompt}</span><ArrowRight size={15} className="transition-transform group-hover:translate-x-1" /></span>
-              </button>
-            </article>
-          ))}
-        </section>
-        <footer className="mt-7 border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground">Touch, watch, and tell the story. / 点一点、看一看、说说你的故事。</footer>
-      </div>
-    </main>
+    <KidPage theme="meadow">
+      <TopBar emoji="🪟" title="Little Windows" subtitle="点一点，每个小窗都有惊喜" />
+      <section className="grid flex-1 content-start gap-4 sm:grid-cols-2" aria-label="Four interactive story canvases">
+        {sessionThreeScenes.map(({ kind, title, subtitle, prompt, icon: Icon }) => (
+          <button
+            key={kind}
+            type="button"
+            onClick={() => activateScene(kind)}
+            aria-label={prompt}
+            data-testid={`button-session-3-${kind}`}
+            className="toy-button toy-white flex flex-col rounded-[30px] p-2.5 text-left"
+          >
+            <div className="min-h-[190px] w-full overflow-hidden rounded-[24px]"><SceneCanvas kind={kind} action={actions[kind]} /></div>
+            <span className="flex w-full items-center gap-3 px-2 pb-1 pt-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#fff3c4] text-[#e0533d]"><Icon size={24} /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-xl font-semibold leading-tight text-[#2d3a4a]">{title}</span>
+                <span className="block text-xs font-bold text-[#6b7a8c]">{subtitle} · {prompt}</span>
+              </span>
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#3fc382] text-white shadow-[0_4px_0_#26995f]" aria-hidden="true">👆</span>
+            </span>
+          </button>
+        ))}
+      </section>
+    </KidPage>
   );
 }
 
@@ -846,8 +837,8 @@ function WindCanvas({ activeWords, persistentWords, weatherWords, triggeredWords
         const blower = blowIndex > 0 ? recipeWords[blowIndex - 1] : undefined;
         const target = blowIndex >= 0 ? recipeWords[blowIndex + 1] : undefined;
         const tornado = heavily && weatherWordsRef.current.includes('wind');
-        const treeFlying = /\btree\s+flies?\b/.test(recipeRef.current) || (tornado && hasTree);
-        const umbrellaFlying = /\bumbrella\s+flies?\b/.test(recipeRef.current);
+        const treeFlying = /\btree\s+(?:flies|fly)\b/.test(recipeRef.current) || (tornado && hasTree);
+        const umbrellaFlying = /\bumbrella\s+(?:flies|fly)\b/.test(recipeRef.current);
         const treeHasWings = treeFlying && !tornado;
         if (interactionIdRef.current !== lastInteractionId) {
           lastInteractionId = interactionIdRef.current;
@@ -1034,25 +1025,20 @@ function WindCanvas({ activeWords, persistentWords, weatherWords, triggeredWords
   return <div ref={holderRef} className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" role="img" aria-label="Watercolor field with an animated tree in the wind" />;
 }
 
-const windWords = [
-  { word: 'wind', type: 'noun', icon: Wind },
-  { word: 'umbrella', type: 'noun', icon: Umbrella },
-  { word: 'tree', type: 'noun', icon: Leaf },
-  { word: 'blow', type: 'verb', icon: Wind },
-  { word: 'fly', type: 'verb', icon: Bird },
-  { word: 'softly', type: 'adverb', icon: Cloud },
-  { word: 'strongly', type: 'adverb', icon: Sparkles },
-  { word: 'heavily', type: 'adverb', icon: CloudRain },
-] as const;
-
-const wordTypeStyles = {
-  noun: 'bg-sky-100 text-sky-700',
-  verb: 'bg-amber-100 text-amber-800',
-  adverb: 'bg-violet-100 text-violet-700',
-} as const;
+const windWords: PictureWord[] = [
+  { word: 'wind', emoji: '🌬️', type: 'noun' },
+  { word: 'umbrella', emoji: '☂️', type: 'noun' },
+  { word: 'tree', emoji: '🌳', type: 'noun' },
+  { word: 'blow', emoji: '💨', type: 'verb' },
+  { word: 'fly', emoji: '🕊️', type: 'verb' },
+  { word: 'softly', emoji: '🍃', type: 'adverb' },
+  { word: 'strongly', emoji: '💪', type: 'adverb' },
+  { word: 'heavily', emoji: '🌪️', type: 'adverb' },
+];
+const windVocab = buildVocab(windWords.map(({ word }) => word));
+const windTypes = typesOf(windWords);
 
 function WindScene() {
-  const [isListening, setIsListening] = useState(false);
   const [playedWords, setPlayedWords] = useState<Set<string>>(() => new Set());
   const [activeWords, setActiveWords] = useState<string[]>([]);
   const [triggeredWords, setTriggeredWords] = useState<string[]>([]);
@@ -1061,18 +1047,12 @@ function WindScene() {
   const [persistentWords, setPersistentWords] = useState<string[]>([]);
   const [weatherWords, setWeatherWords] = useState<string[]>([]);
   const [sceneHistory, setSceneHistory] = useState<Array<{ words: string[]; persistent: string[]; weather: string[]; recipe: string }>>([]);
-  const [status, setStatus] = useState('Say a word or make a silly recipe.');
-  const recognitionRef = useRef<SpeechLike | null>(null);
+  const [heard, setHeard] = useState<HeardState>(emptyHeard);
 
-  useEffect(() => () => recognitionRef.current?.stop(), []);
-
-  const markWordsPlayed = (phrase: string) => {
-    const lowerCasePhrase = phrase.toLowerCase();
-    const foundWords = windWords.filter(({ word }) => word === 'blow'
-      ? /\bblows?\b/.test(lowerCasePhrase)
-      : new RegExp(`\\b${word}\\b`).test(lowerCasePhrase));
-    if (foundWords.length) setPlayedWords((current) => new Set([...current, ...foundWords.map(({ word }) => word)]));
-    return foundWords.map(({ word }) => word);
+  // Keep the word-garden order, drop repeats.
+  const orderWords = (words: string[]) => windWords.map(({ word }) => word).filter((word) => words.includes(word));
+  const markWordsPlayed = (words: string[]) => {
+    if (words.length) setPlayedWords((current) => new Set([...current, ...words]));
   };
 
   const applyWordsToCanvas = (words: string[], replaceCanvas = false, heardRecipe = '') => {
@@ -1087,101 +1067,58 @@ function WindScene() {
     if (heardRecipe) setRecipe(heardRecipe);
   };
 
+  const mic = useSpeechWords({
+    vocab: windVocab,
+    onUtterance: (utterance) => {
+      setHeard(heardFrom(utterance, windVocab));
+      const found = orderWords(utterance.words);
+      markWordsPlayed(found);
+      // Each sentence is a new recipe, so its adverb replaces the last one.
+      if (found.length) applyWordsToCanvas(found, true, utterance.canonical);
+    },
+  });
+
+  const pickWord = (word: string) => {
+    speakWord(word);
+    markWordsPlayed([word]);
+    applyWordsToCanvas([word]);
+    setHeard({ ...emptyHeard, tokens: toHeardTokens(word, windVocab) });
+  };
+
   const clearCanvas = () => {
     setSceneHistory((current) => [...current, { words: activeWords, persistent: persistentWords, weather: weatherWords, recipe }]);
     setActiveWords([]); setPersistentWords([]); setWeatherWords([]); setTriggeredWords([]); setRecipe(''); setInteractionId((current) => current + 1);
-    setStatus('Canvas cleared. The tree, sky, and land are ready.');
+    setHeard({ ...emptyHeard, message: 'A fresh sky! 🌤️ 画布清空啦' });
   };
 
   const restorePreviousScene = () => {
     const previous = sceneHistory[sceneHistory.length - 1];
-    if (!previous) { setStatus('There is no previous scene yet.'); return; }
+    if (!previous) return;
     setActiveWords(previous.words); setPersistentWords(previous.persistent); setWeatherWords(previous.weather); setRecipe(previous.recipe);
     setTriggeredWords(previous.words); setInteractionId((current) => current + 1);
-    setSceneHistory((current) => current.slice(0, -1)); setStatus('Previous scene restored.');
-  };
-
-  const listenForRecipe = () => {
-    if (isListening) { recognitionRef.current?.stop(); return; }
-    const speechWindow = window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor };
-    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (!Recognition) {
-      setStatus('Voice recognition is not available here. Choose a word card or play the canvas instead.');
-      return;
-    }
-    const recognition = new Recognition();
-    recognitionRef.current = recognition;
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onstart = () => {
-      setIsListening(true);
-      setStatus('Listening… make a silly recipe with any words.');
-    };
-    recognition.onerror = () => { setIsListening(false); setStatus('I could not hear that. Try the sentence again, or play the scene.'); };
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      setIsListening(false);
-    };
-    recognition.onresult = (event) => {
-      const latestResult = event.results[event.results.length - 1];
-      if (!latestResult?.isFinal) return;
-      // Each completed utterance is a new recipe, so its adverb replaces the last one.
-      const heard = latestResult[0]?.transcript?.toLowerCase() ?? '';
-      const found = markWordsPlayed(heard);
-      if (found.length) {
-        applyWordsToCanvas(found, true, heard);
-        setStatus(`Recipe heard: ${found.join(' + ')}.`);
-      }
-      else setStatus(`I heard “${heard}”. Try one of the word cards.`);
-    };
-    recognition.start();
+    setSceneHistory((current) => current.slice(0, -1));
+    setHeard(previous.recipe ? { ...emptyHeard, tokens: toHeardTokens(previous.recipe, windVocab) } : { ...emptyHeard, message: 'One step back ↩️ 退了一步' });
   };
 
   return (
-    <main className="story-shell text-foreground">
-      <div className="mx-auto flex min-h-[100dvh] max-w-[1280px] flex-col px-4 pb-8 sm:px-8 lg:px-12">
-        <header className="flex items-center justify-between py-5 sm:py-7">
-          <Link href="/" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold"><ArrowRight className="rotate-180" size={16} /> Chapters</Link>
-          <p className="mono-label text-muted-foreground">moving nature · 01 / 04</p>
-        </header>
-        <section className="mb-7 max-w-3xl">
-          <p className="mono-label mb-2 text-secondary">first scene / wind</p>
-          <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[clamp(3rem,8vw,6.4rem)] font-black leading-[.88] tracking-[-.08em]">Your voice<br /><span className="text-secondary">moves nature.</span></h1><p className="mt-5 max-w-xl text-base font-semibold leading-relaxed text-muted-foreground">Try any words together. The canvas is ready for your silly recipe.</p></div><div className="rotate-[-4deg] rounded-[16px] bg-[#ffd248] px-5 py-3 text-center text-primary shadow-sm"><strong className="block text-2xl leading-none">{playedWords.size}</strong><span className="text-xs font-black">words played</span></div></div>
-        </section>
-        <section className="grid flex-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="paper-shadow rounded-[28px] bg-[#fff8e8] p-5 sm:p-6">
-            <p className="mono-label text-primary">word garden</p>
-            <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-1">
-              {windWords.map(({ word, type, icon: Icon }) => (
-                <button key={word} type="button" onClick={() => {
-                  window.speechSynthesis?.cancel();
-                  const utterance = new SpeechSynthesisUtterance(word); utterance.lang = 'en-US'; utterance.rate = 0.78; window.speechSynthesis?.speak(utterance);
-                  markWordsPlayed(word); applyWordsToCanvas([word]); setStatus(`Listen: ${word}.`);
-                }} className={`flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm transition-transform hover:-translate-y-0.5 ${playedWords.has(word) ? 'ring-2 ring-secondary' : ''}`}>
-                  <span className="capitalize">{word} <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-black ${wordTypeStyles[type]}`}>{type}</span></span><Icon size={16} className="text-secondary" />
-                </button>
-              ))}
-            </div>
-          </aside>
-          <div className="paper-shadow canvas-grid flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4">
-            <div className="flex min-h-[330px] flex-1 flex-col gap-3 lg:flex-row"><div className="relative min-h-[330px] flex-1"><WindCanvas activeWords={activeWords} persistentWords={persistentWords} weatherWords={weatherWords} triggeredWords={triggeredWords} interactionId={interactionId} recipe={recipe} /><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div><aside className="rounded-[20px] bg-[#fff8e8] p-4 lg:w-52"><p className="mono-label text-primary">what I just heard…</p><p className="mt-3 text-sm font-bold leading-relaxed text-primary">{recipe || 'Say a recipe and I will write it here.'}</p><div className="mt-5 grid gap-2"><button type="button" onClick={restorePreviousScene} className="rounded-full border-2 border-primary bg-card px-3 py-2 text-xs font-black text-primary">Previous scene</button><button type="button" onClick={clearCanvas} className="rounded-full bg-primary px-3 py-2 text-xs font-black text-primary-foreground">Clear canvas</button></div></aside></div>
-            <div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between">
-              <div><p className="font-black">Make a silly recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70" role="status" aria-live="polite">{status}</p></div>
-              <button type="button" onClick={listenForRecipe} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17} /> {isListening ? 'Stop listening' : 'Speak'}</button>
-            </div>
-          </div>
-        </section>
-        <footer className="mt-7 flex items-center justify-between border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground"><span>Wind is the first of four Moving Nature scenes.</span><Link href="/moving-nature/rain" className="rounded-full bg-secondary px-4 py-2 font-black text-secondary-foreground">Next: Rain <ArrowRight className="inline" size={14}/></Link></footer>
-      </div>
-    </main>
+    <KidPage theme="sky">
+      <TopBar emoji="🌬️" title="Wind" subtitle="Moving Nature 1/4 · 风" stars={{ value: playedWords.size, total: windWords.length }} next={{ href: '/moving-nature/rain', label: 'Rain' }} />
+      <PlayLayout
+        canvas={(
+          <CanvasFrame
+            overlay={<HeardBubble listening={mic.listening} interim={mic.interim} types={windTypes} {...heard} />}
+            caption={<StoryCaption>Make a silly recipe! Try “the wind blows the tree”. 🌳</StoryCaption>}
+            aspect={0.7}
+          >
+            <WindCanvas activeWords={activeWords} persistentWords={persistentWords} weatherWords={weatherWords} triggeredWords={triggeredWords} interactionId={interactionId} recipe={recipe} />
+          </CanvasFrame>
+        )}
+        dock={<ControlDock mic={<MicButton status={mic.status} level={mic.level} onToggle={mic.toggle} />} onUndo={restorePreviousScene} onClear={clearCanvas} undoDisabled={!sceneHistory.length} />}
+        words={<WordTray words={windWords} played={playedWords} onPick={pickWord} title="Word garden" />}
+      />
+    </KidPage>
   );
 }
-
-const rainWords = [
-  { word: 'rain', type: 'noun', icon: CloudRain }, { word: 'umbrella', type: 'noun', icon: Umbrella }, { word: 'tree', type: 'noun', icon: Leaf }, { word: 'puddle', type: 'noun', icon: Cloud }, { word: 'alice', type: 'noun', icon: Bot },
-  { word: 'fall', type: 'verb', icon: ArrowDown }, { word: 'splash', type: 'verb', icon: Sparkles }, { word: 'softly', type: 'adverb', icon: Cloud }, { word: 'heavily', type: 'adverb', icon: CloudRain },
-] as const;
 
 function RainCanvas({ words }: { words: string[] }) {
   const holderRef = useRef<HTMLDivElement>(null); const wordsRef = useRef(words); wordsRef.current = words;
@@ -1197,15 +1134,80 @@ function RainCanvas({ words }: { words: string[] }) {
     }; }; const instance = new p5(sketch); return () => instance.remove(); }, []); return <div ref={holderRef} className="h-full w-full overflow-hidden rounded-[22px] [&>canvas]:block" />;
 }
 
+const rainWords: PictureWord[] = [
+  { word: 'rain', emoji: '🌧️', type: 'noun' },
+  { word: 'umbrella', emoji: '☂️', type: 'noun' },
+  { word: 'tree', emoji: '🌳', type: 'noun' },
+  { word: 'puddle', emoji: '💧', type: 'noun' },
+  { word: 'alice', emoji: '👧', type: 'noun' },
+  { word: 'fall', emoji: '⬇️', type: 'verb' },
+  { word: 'splash', emoji: '💦', type: 'verb' },
+  { word: 'softly', emoji: '🍃', type: 'adverb' },
+  { word: 'heavily', emoji: '⛈️', type: 'adverb' },
+];
+const rainVocab = buildVocab(rainWords.map(({ word }) => word));
+const rainTypes = typesOf(rainWords);
+
 function RainScene() {
-  const [words, setWords] = useState<string[]>([]); const [recipe, setRecipe] = useState(''); const [status, setStatus] = useState('Say a rainy recipe.'); const [listening, setListening] = useState(false);
-  const [history, setHistory] = useState<string[][]>([]); const recognitionRef = useRef<SpeechLike | null>(null); const wordsRef = useRef(words); wordsRef.current = words;
-  useEffect(() => () => recognitionRef.current?.stop(), []);
-  const apply = (next: string[], heard = '') => { setHistory(current => [...current, words]); setWords(next); if (heard) setRecipe(heard); setStatus(heard ? `Recipe heard: ${next.join(' + ')}.` : `Rain recipe: ${next.join(' + ')}.`); };
-  const listen = () => { if (listening) { recognitionRef.current?.stop(); return; } const W = window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor }; const R = W.SpeechRecognition || W.webkitSpeechRecognition; if (!R) { setStatus('Voice recognition is not available in this browser.'); return; } const recognition = new R(); recognitionRef.current = recognition; recognition.lang = 'en-US'; recognition.continuous = true; recognition.interimResults = true; recognition.onstart = () => { setListening(true); setStatus('Listening… make a rainy recipe.'); }; recognition.onend = () => { recognitionRef.current = null; setListening(false); }; recognition.onresult = event => { const result = event.results[event.results.length - 1]; if (!result?.isFinal) return; const heard = result[0]?.transcript?.toLowerCase() ?? ''; const found = rainWords.filter(({ word }) => new RegExp(`\\b${word}\\b`).test(heard)).map(({ word }) => word); if (found.length) apply([...new Set([...wordsRef.current, ...found])], heard); else setStatus(`I heard “${heard}”. Try rain, puddle, or splash.`); }; recognition.start(); };
-  const clear = () => { setHistory(current => [...current, words]); setWords([]); setRecipe(''); setStatus('Canvas cleared.'); };
-  const previous = () => { const last = history[history.length - 1]; if (!last) { setStatus('There is no previous scene yet.'); return; } setWords(last); setHistory(current => current.slice(0, -1)); setStatus('Previous scene restored.'); };
-  return <main className="story-shell text-foreground"><div className="mx-auto flex min-h-[100dvh] max-w-[1280px] flex-col px-4 pb-8 sm:px-8 lg:px-12"><header className="flex items-center justify-between py-5 sm:py-7"><Link href="/moving-nature" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-4 text-sm font-extrabold"><ArrowRight className="rotate-180" size={16}/> Wind</Link><p className="mono-label text-muted-foreground">moving nature · 02 / 04</p></header><section className="mb-7"><p className="mono-label mb-2 text-secondary">second scene / rain</p><h1 className="text-[clamp(3rem,8vw,6.4rem)] font-black leading-[.88] tracking-[-.08em]">Your voice<br/><span className="text-secondary">makes rain.</span></h1></section><section className="grid flex-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]"><aside className="paper-shadow rounded-[28px] bg-[#fff8e8] p-5 sm:p-6"><p className="mono-label text-primary">word garden</p><div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-1">{rainWords.map(({word,type,icon:Icon})=><button key={word} onClick={()=>apply([...new Set([...words,word])], word)} className="flex items-center justify-between rounded-[15px] bg-card px-3 py-2.5 text-left text-sm font-black shadow-sm"><span className="capitalize">{word} <span className={`ml-1 rounded-full px-2 py-.5 text-[10px] ${wordTypeStyles[type]}`}>{type}</span></span><Icon size={16} className="text-secondary"/></button>)}</div></aside><div className="paper-shadow flex min-h-[470px] flex-col rounded-[30px] bg-card p-3 sm:p-4"><div className="flex min-h-[330px] flex-1 flex-col gap-3 lg:flex-row"><div className="relative min-h-[330px] flex-1"><RainCanvas words={words}/><span className="absolute left-4 top-4 rounded-full bg-card/85 px-3 py-1.5 text-[11px] font-black text-primary">canvas</span></div><aside className="rounded-[20px] bg-[#fff8e8] p-4 lg:w-52"><p className="mono-label text-primary">what I just heard…</p><p className="mt-3 text-sm font-bold leading-relaxed text-primary">{recipe || 'Say a recipe and I will write it here.'}</p><div className="mt-5 grid gap-2"><button onClick={previous} className="rounded-full border-2 border-primary bg-card px-3 py-2 text-xs font-black text-primary">Previous scene</button><button onClick={clear} className="rounded-full bg-primary px-3 py-2 text-xs font-black text-primary-foreground">Clear canvas</button></div></aside></div><div className="mt-4 flex flex-col gap-3 rounded-[20px] bg-sidebar p-4 text-sidebar-foreground sm:flex-row sm:items-center sm:justify-between"><div><p className="font-black">Make a rainy recipe.</p><p className="mt-1 text-xs font-bold text-sidebar-foreground/70">{status}</p></div><button onClick={listen} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-black text-secondary-foreground"><Mic size={17}/>{listening ? 'Stop listening' : 'Speak'}</button></div></div></section></div></main>;
+  const [words, setWords] = useState<string[]>([]);
+  const [history, setHistory] = useState<string[][]>([]);
+  const [playedWords, setPlayedWords] = useState<Set<string>>(() => new Set());
+  const [heard, setHeard] = useState<HeardState>(emptyHeard);
+  const wordsRef = useRef(words);
+  wordsRef.current = words;
+
+  // A new sentence adds to the scene: saying "umbrella" does not wash away the puddle.
+  const apply = (found: string[]) => {
+    if (!found.length) return;
+    setHistory((current) => [...current, wordsRef.current]);
+    setWords((current) => [...new Set([...current, ...found])]);
+    setPlayedWords((current) => new Set([...current, ...found]));
+  };
+
+  const mic = useSpeechWords({
+    vocab: rainVocab,
+    onUtterance: (utterance) => {
+      setHeard(heardFrom(utterance, rainVocab));
+      apply([...new Set(utterance.words)]);
+    },
+  });
+
+  const pickWord = (word: string) => {
+    speakWord(word === 'alice' ? 'Alice' : word);
+    apply([word]);
+    setHeard({ ...emptyHeard, tokens: toHeardTokens(word, rainVocab) });
+  };
+  const clear = () => {
+    setHistory((current) => [...current, words]);
+    setWords([]);
+    setHeard({ ...emptyHeard, message: 'A fresh sky! 🌤️ 画布清空啦' });
+  };
+  const previous = () => {
+    const last = history[history.length - 1];
+    if (!last) return;
+    setWords(last);
+    setHistory((current) => current.slice(0, -1));
+    setHeard({ ...emptyHeard, message: 'One step back ↩️ 退了一步' });
+  };
+
+  return (
+    <KidPage theme="rain">
+      <TopBar backHref="/moving-nature" backLabel="Back to Wind" emoji="🌧️" title="Rain" subtitle="Moving Nature 2/4 · 雨" stars={{ value: playedWords.size, total: rainWords.length }} />
+      <PlayLayout
+        canvas={(
+          <CanvasFrame
+            overlay={<HeardBubble listening={mic.listening} interim={mic.interim} types={rainTypes} {...heard} />}
+            caption={<StoryCaption>Make a rainy recipe! Try “Alice splashes in the puddle”. ☔</StoryCaption>}
+            aspect={0.7}
+          >
+            <RainCanvas words={words} />
+          </CanvasFrame>
+        )}
+        dock={<ControlDock mic={<MicButton status={mic.status} level={mic.level} onToggle={mic.toggle} />} onUndo={previous} onClear={clear} undoDisabled={!history.length} />}
+        words={<WordTray words={rainWords} played={playedWords} onPick={pickWord} title="Word garden" />}
+      />
+    </KidPage>
+  );
 }
 
 function MovingNature() {
@@ -2005,224 +2007,59 @@ function MovingNature() {
   );
 }
 
+const storyWords: PictureWord[] = [
+  { word: 'apple', emoji: '🍎', type: 'noun' },
+  { word: 'bee', emoji: '🐝', type: 'noun' },
+  { word: 'eat', emoji: '😋', type: 'verb' },
+  { word: 'fly', emoji: '🕊️', type: 'verb' },
+];
+const storyVocab = buildVocab(storyWords.map(({ word }) => word));
+const storyTypes = typesOf(storyWords);
+
 function Home() {
-  const [heard, setHeard] = useState('');
   const [words, setWords] = useState<Word[]>([]);
-  const [isListening, setIsListening] = useState(false);
-  const [status, setStatus] = useState('Say one word, or build a silly phrase.');
-  const [unsupported, setUnsupported] = useState(false);
-  const recognitionRef = useRef<SpeechLike | null>(null);
-  const supported = useMemo(() => typeof window !== 'undefined' && Boolean((window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor }).SpeechRecognition || (window as Window & { webkitSpeechRecognition?: SpeechConstructor }).webkitSpeechRecognition), []);
+  const [heard, setHeard] = useState<HeardState>(emptyHeard);
 
-  useEffect(() => {
-    if (!supported) {
-      setUnsupported(true);
-      setStatus('Microphone words are not available in this browser. Try the four buttons below.');
-      return;
-    }
-    const speechWindow = window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor };
-    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (!Recognition) return;
-    const recognition = new Recognition();
-    recognition.lang = 'en-US';
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.onstart = () => { setIsListening(true); setStatus('Listening… say one word or a silly phrase.'); };
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = (event) => {
-      setIsListening(false);
-      setStatus(event.error === 'not-allowed' ? 'Microphone access is off. You can still tap an example word.' : 'I missed that. Let’s try one more time.');
-    };
-    recognition.onresult = (event) => {
-      const transcript = Array.from({ length: event.results.length }, (_, index) => event.results[index][0].transcript).join(' ');
-      setHeard(transcript);
-      const lastResult = event.results[event.results.length - 1];
-      if (!lastResult?.isFinal) return;
-      const spokenWords = findWords(transcript);
-      if (spokenWords.length) addWords(spokenWords, transcript);
-      else setStatus('I heard you, but try one of the four silly story words.');
-    };
-    recognitionRef.current = recognition;
-    return () => { recognition.stop(); recognitionRef.current = null; };
-  }, [supported]);
+  const mic = useSpeechWords({
+    vocab: storyVocab,
+    onUtterance: (utterance) => {
+      setHeard(heardFrom(utterance, storyVocab));
+      if (utterance.words.length) setWords((current) => [...current, ...(utterance.words as Word[])]);
+    },
+  });
 
-  const addWords = useCallback((newWords: Word[], spokenText: string = newWords.join(' ')) => {
-    setHeard(spokenText);
-    setWords((current) => [...current, ...newWords]);
-    setStatus(`${newWords.join(' + ')} joined the story. What a silly idea!`);
-  }, []);
-
-  const addWord = (word: Word) => addWords([word]);
-
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      setUnsupported(true);
-      return;
-    }
-    if (isListening) recognitionRef.current.stop();
-    else {
-      setHeard('');
-      setStatus('Listening… say one word or a silly phrase.');
-      try { recognitionRef.current.start(); } catch { setStatus('The microphone is busy. Please tap again.'); }
-    }
+  const pickWord = (word: string) => {
+    speakWord(word);
+    setWords((current) => [...current, word as Word]);
+    setHeard({ ...emptyHeard, tokens: toHeardTokens(word, storyVocab) });
   };
-
-  const resetStory = () => {
+  const undo = () => {
+    setWords((current) => current.slice(0, -1));
+    setHeard({ ...emptyHeard, message: 'One step back ↩️ 退了一步' });
+  };
+  const clear = () => {
     setWords([]);
-    setHeard('');
-    setStatus('A fresh page! Try making a silly word recipe.');
+    setHeard({ ...emptyHeard, message: 'A fresh page! 🌱 新的一页' });
   };
 
-  const sentence = sentenceForWords(words);
-  const foundCount = vocabulary.filter(({ word }) => words.includes(word)).length;
-  const recipe = words.length ? words.join('  +  ') : 'Your word recipe will appear here';
-
+  const played = new Set<string>(words);
   return (
-    <main className="story-shell text-foreground">
-      <div className="mx-auto flex min-h-[100dvh] max-w-[1440px] flex-col px-4 pb-8 sm:px-7 lg:px-10">
-        <header className="flex items-center justify-between py-5 sm:py-7">
-          <div className="flex items-center gap-3" data-testid="brand-story-canvas">
-            <div className="grid h-11 w-11 rotate-[-5deg] place-items-center rounded-[14px] bg-primary text-primary-foreground soft-shadow">
-              <BookOpen size={23} strokeWidth={2.5} />
-            </div>
-            <div>
-              <p className="text-[17px] font-black leading-none tracking-[-.03em]">Story Canvas</p>
-              <p className="mono-label mt-1 text-muted-foreground">English playground</p>
-            </div>
-          </div>
-          <div className="hidden items-center gap-2 rounded-full bg-card px-3 py-2 text-xs font-bold text-muted-foreground scribble-border sm:flex">
-            <Sparkles size={14} className="text-primary" /> Speak. Watch. Build.
-          </div>
-          <button onClick={resetStory} data-testid="button-reset-story" className="flex min-h-11 items-center gap-2 rounded-full border-2 border-border bg-card px-3.5 text-sm font-extrabold transition-transform hover:-translate-y-0.5 active:translate-y-0">
-            <RotateCcw size={16} /> <span className="hidden sm:inline">Start over</span>
-          </button>
-        </header>
-
-        <section className="grid flex-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(330px,.75fr)] lg:gap-8">
-          <div className="flex min-w-0 flex-col">
-            <div className="mb-5 flex items-end justify-between gap-4">
-              <div>
-                <p className="mono-label mb-2 text-primary">01 / make a story</p>
-                <h1 className="max-w-[740px] text-[clamp(2.25rem,6vw,5.3rem)] font-black leading-[.92] tracking-[-.07em]">
-                  Your voice<br /><span className="text-secondary">draws the world.</span>
-                </h1>
-              </div>
-              <div className="hidden shrink-0 -rotate-3 rounded-[12px] bg-accent px-3 py-2 text-center text-xs font-black text-accent-foreground sm:block">
-                 <span className="block text-lg leading-none">{words.length}</span>
-                 words played
-              </div>
-            </div>
-            <section className="mb-8 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
-              <div className="rounded-[24px] bg-card p-5 scribble-border sm:p-6">
-                <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <p className="mono-label text-primary">02 / silly word lab</p>
-                    <h2 className="mt-1 text-2xl font-black tracking-[-.05em]">Only four words. Endless trouble.</h2>
-                    <p className="mt-1 text-sm font-semibold text-muted-foreground">Tap or say a word. Try them in a new order.</p>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-black text-secondary" data-testid="text-vocabulary-progress">
-                    <span className="text-2xl">{foundCount}</span><span className="text-muted-foreground">/ 4 words found</span>
-                  </div>
-                </div>
-                <div className="mb-5 h-3 overflow-hidden rounded-full bg-muted" aria-label={`${foundCount} of 4 vocabulary words found`}>
-                  <div className="h-full rounded-full bg-secondary transition-[width] duration-500" style={{ width: `${(foundCount / 4) * 100}%` }} />
-                </div>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                  {vocabulary.map(({ word, hint, color }) => {
-                    const found = words.includes(word);
-                    return (
-                      <button key={word} onClick={() => addWord(word)} data-testid={`button-word-${word}`} className={`group relative min-h-[86px] rounded-[16px] border-2 p-3 text-left transition-transform hover:-translate-y-1 active:translate-y-0 ${found ? 'border-secondary bg-secondary/10' : 'border-border bg-background'}`}>
-                        <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${color === 'coral' ? 'bg-primary' : color === 'yellow' || color === 'sun' ? 'bg-accent' : color === 'teal' || color === 'mint' ? 'bg-secondary' : 'bg-[#b7a4da]'}`} />
-                        <span className="block text-lg font-black tracking-[-.04em]">{word}</span>
-                        <span className="mt-0.5 block text-[11px] font-semibold text-muted-foreground">{hint}</span>
-                        {found && <Check size={16} className="absolute bottom-3 right-3 text-secondary" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="dot-field flex min-h-[150px] flex-col justify-between rounded-[24px] bg-accent p-5 text-accent-foreground sm:min-w-[220px] sm:p-6">
-                <div className="flex items-start justify-between">
-                  <CircleHelp size={23} />
-                  <Flower2 className="wiggle" size={30} />
-                </div>
-                <div>
-                  <p className="text-lg font-black leading-tight">Need a little help?</p>
-                  <p className="mt-1 text-xs font-bold leading-snug opacity-70">Listen for the word, then repeat it.</p>
-                </div>
-              </div>
-            </section>
-            <div className="paper-shadow canvas-grid relative flex min-h-[330px] flex-1 overflow-hidden rounded-[28px] bg-card p-2 sm:min-h-[430px] sm:p-3">
-              <StoryCanvas activeWords={words} />
-              <div className="absolute left-5 top-5 rounded-full bg-card/90 px-3 py-1.5 text-[11px] font-extrabold text-secondary scribble-border backdrop-blur-sm">
-                <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-secondary" /> live canvas
-              </div>
-              <div className="absolute bottom-5 left-5 max-w-[190px] rounded-[14px] bg-card/90 px-3 py-2 text-xs font-bold leading-snug scribble-border backdrop-blur-sm">
-                Every word adds a new detail.
-              </div>
-            </div>
-          </div>
-
-          <aside className="flex flex-col gap-4 lg:pt-10">
-            <div className="relative overflow-hidden rounded-[24px] bg-sidebar p-5 text-sidebar-foreground soft-shadow sm:p-6">
-              <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full border-[14px] border-sidebar-primary/25" />
-              <div className="relative">
-                <div className="mb-5 flex items-center justify-between">
-                  <div>
-                    <p className="mono-label text-sidebar-primary">your turn</p>
-                   <h2 className="mt-1 text-2xl font-black tracking-[-.04em]">Make a silly recipe</h2>
-                     <p className="mt-1 text-xs font-semibold text-sidebar-foreground/65">自由组合四个词</p>
-                  </div>
-                  <div className={`grid h-11 w-11 place-items-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground ${isListening ? 'listen-ring' : ''}`}>
-                    {isListening ? <Waves size={20} /> : <Mic size={20} />}
-                  </div>
-                </div>
-                <button onClick={toggleListening} disabled={unsupported} data-testid="button-toggle-listening" className="flex min-h-[68px] w-full items-center justify-between rounded-[17px] bg-sidebar-primary px-5 text-left text-lg font-black text-sidebar-primary-foreground transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55">
-                   <span>{unsupported ? 'Microphone unavailable' : isListening ? 'Listening…' : 'Say a word or a phrase'}</span>
-                  {isListening ? <MicOff size={22} /> : <ArrowRight size={23} />}
-                </button>
-                <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-sidebar-foreground/70" data-testid="status-listening">
-                  <span className={`h-2 w-2 rounded-full ${isListening ? 'bg-sidebar-primary' : 'bg-sidebar-foreground/35'}`} />
-                  {status}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-[24px] bg-card p-5 scribble-border sm:p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="mono-label text-muted-foreground">latest sound</p>
-                  <p className="mt-1 text-xs font-semibold text-muted-foreground">刚刚听到</p>
-                </div>
-                <Volume2 size={18} className="text-secondary" />
-              </div>
-              <div className="flex min-h-[58px] items-center rounded-[15px] bg-muted px-4 text-xl font-black tracking-[-.03em]" data-testid="text-latest-heard">
-                {heard || <span className="text-muted-foreground/55">Say something…</span>}
-              </div>
-            </div>
-
-            <div className="rounded-[24px] bg-card p-5 scribble-border sm:p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="mono-label text-muted-foreground">story sentence</p>
-                   <p className="mt-1 text-xs font-semibold text-muted-foreground">你的搞笑故事</p>
-                </div>
-                <BookOpen size={18} className="text-primary" />
-              </div>
-               <p className="min-h-[58px] rounded-[15px] border-2 border-dashed border-primary/30 bg-primary/5 px-4 py-3 text-lg font-extrabold leading-snug text-foreground" data-testid="text-story-sentence">{sentence}</p>
-               <div className="mt-3 rounded-[13px] bg-muted px-3 py-2 font-mono text-xs font-bold tracking-wide text-muted-foreground" data-testid="text-word-recipe">
-                 {recipe}
-               </div>
-            </div>
-          </aside>
-        </section>
-
-        <footer className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5 text-xs font-semibold text-muted-foreground">
-          <p className="flex items-center gap-2"><Headphones size={14} /> Best with a grown-up nearby <span className="text-muted-foreground/60">|</span> 和大人一起玩</p>
-          <p className="flex items-center gap-2"><Info size={14} /> Microphone uses English (US) recognition</p>
-        </footer>
-      </div>
-    </main>
+    <KidPage theme="sun">
+      <TopBar emoji="📖" title="Story Canvas" subtitle="说一个词，故事就会动起来" stars={{ value: played.size, total: storyWords.length }} />
+      <PlayLayout
+        canvas={(
+          <CanvasFrame
+            overlay={<HeardBubble listening={mic.listening} interim={mic.interim} types={storyTypes} {...heard} />}
+            caption={<StoryCaption>{words.length ? sentenceForWords(words) : 'Say apple, bee, eat or fly to start the story! ✨'}</StoryCaption>}
+            aspect={0.63}
+          >
+            <StoryCanvas activeWords={words} />
+          </CanvasFrame>
+        )}
+        dock={<ControlDock mic={<MicButton status={mic.status} level={mic.level} onToggle={mic.toggle} />} onUndo={undo} onClear={clear} undoDisabled={!words.length} />}
+        words={<WordTray words={storyWords} played={played} onPick={pickWord} />}
+      />
+    </KidPage>
   );
 }
 
