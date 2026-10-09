@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -60,6 +60,7 @@
   --font-sans: var(--app-font-sans);
   --font-serif: var(--app-font-serif);
   --font-mono: var(--app-font-mono);
+  --font-display: var(--app-font-display);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -144,6 +145,7 @@
   --app-font-sans: 'Nunito', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: 'DM Mono', monospace;
+  --app-font-display: 'Fredoka', 'Nunito', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --radius: 0.5rem; /* 8px */
   --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0); /*replace with H S L */
   --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0); /*replace with H S L */
@@ -462,4 +464,68 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @keyframes wiggle { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
 @media (prefers-reduced-motion: reduce) {
   .listen-ring, .float-gently, .wiggle { animation: none; }
+}
+
+/* ------------------------------------------------------------------------
+ * Kid-friendly play kit (components/kid-ui.tsx)
+ * Chunky "toy" buttons with a pressable bottom edge, soft sky backgrounds,
+ * and one theme colour per chapter.
+ * ---------------------------------------------------------------------- */
+.font-display { font-family: var(--app-font-display); }
+.kid-shell {
+  min-height: 100dvh;
+  color: #2d3a4a;
+  background-color: var(--kid-bg, #fff7e6);
+  background-image:
+    radial-gradient(ellipse 340px 120px at 12% 9%, rgb(255 255 255 / .9), transparent 70%),
+    radial-gradient(ellipse 280px 100px at 88% 16%, rgb(255 255 255 / .75), transparent 70%),
+    radial-gradient(circle at 50% 120%, var(--kid-glow, #ffe4a8), transparent 55%),
+    linear-gradient(180deg, var(--kid-top, #dff3ff), var(--kid-bg, #fff7e6) 62%);
+  background-attachment: fixed;
+}
+.kid-theme-sun { --kid-top: #d8f0ff; --kid-bg: #fff6df; --kid-glow: #ffdf8f; }
+.kid-theme-sky { --kid-top: #c9ecff; --kid-bg: #eefaf3; --kid-glow: #bfe9c9; }
+.kid-theme-rain { --kid-top: #d3def5; --kid-bg: #eef3fb; --kid-glow: #c7d7f2; }
+.kid-theme-meadow { --kid-top: #d6f2ff; --kid-bg: #f4fbe9; --kid-glow: #d6efb2; }
+
+.toy-button {
+  --toy-face: #ffffff; --toy-edge: #d9dee6; --toy-ink: #2d3a4a;
+  background: var(--toy-face);
+  color: var(--toy-ink);
+  box-shadow: 0 6px 0 var(--toy-edge), 0 10px 18px rgb(45 58 74 / .12);
+  transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+  touch-action: manipulation;
+  user-select: none;
+}
+.toy-button:hover:not(:disabled) { filter: brightness(1.03); transform: translateY(-1px); }
+.toy-button:active:not(:disabled) { transform: translateY(5px); box-shadow: 0 1px 0 var(--toy-edge), 0 3px 6px rgb(45 58 74 / .12); }
+.toy-button:focus-visible { outline: 4px solid #4aa8ff; outline-offset: 3px; }
+.toy-button:disabled { cursor: not-allowed; }
+.toy-white { --toy-face: #ffffff; --toy-edge: #d6dce5; --toy-ink: #2d3a4a; }
+.toy-coral { --toy-face: #ff7657; --toy-edge: #d9502f; --toy-ink: #ffffff; }
+.toy-green { --toy-face: #3fc382; --toy-edge: #26995f; --toy-ink: #ffffff; }
+.toy-grey { --toy-face: #c9d0da; --toy-edge: #a5afbc; --toy-ink: #ffffff; }
+.toy-sun { --toy-face: #ffd84d; --toy-edge: #e0b419; --toy-ink: #5a3d00; }
+.tile-noun { --toy-face: #eaf6ff; --toy-edge: #a9d6f5; }
+.tile-verb { --toy-face: #fff4d6; --toy-edge: #f2cf74; }
+.tile-adverb { --toy-face: #f3edff; --toy-edge: #cdbcf3; }
+
+@media (min-width: 1024px) {
+  /* Leave room for the top bar (≈96px), caption (≈56px) and mic dock (≈190px). */
+  .fit-screen { max-width: max(520px, calc((100dvh - 350px) / var(--canvas-aspect, .65))); }
+}
+.canvas-frame { box-shadow: 0 8px 0 rgb(45 58 74 / .08), 0 18px 36px rgb(45 58 74 / .12); }
+.control-dock { background: linear-gradient(180deg, transparent, rgb(255 255 255 / .92) 28%); }
+@media (min-width: 1024px) { .control-dock { background: none; } }
+
+.live-dot { animation: live-blink 1.4s ease-in-out infinite; }
+.mic-wave { animation: mic-wave 1.6s ease-out infinite; }
+.pop-in { animation: pop-in .35s cubic-bezier(.34, 1.56, .64, 1) both; }
+.bob { animation: bob 3.2s ease-in-out infinite; }
+@keyframes live-blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes mic-wave { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes pop-in { 0% { transform: scale(.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .live-dot, .mic-wave, .pop-in, .bob { animation: none; }
 }
