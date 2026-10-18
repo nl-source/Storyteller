@@ -12,6 +12,7 @@ import { Link } from 'wouter';
 import { ArrowLeft, ArrowRight, Eraser, Home as HomeIcon, Mic, Undo2, Volume2 } from 'lucide-react';
 import type { MicStatus } from '@/hooks/use-speech-words';
 import type { HeardToken } from '@/lib/speech-match';
+import { FirstRunHints } from '@/components/first-run-hints';
 
 export type WordType = 'noun' | 'verb' | 'adverb';
 
@@ -29,6 +30,7 @@ export function KidPage({ theme, children }: { theme: 'sun' | 'sky' | 'rain' | '
   return (
     <main className={`kid-shell kid-theme-${theme}`}>
       <div className="mx-auto flex min-h-[100dvh] max-w-[1320px] flex-col px-3 pb-52 sm:px-5 lg:pb-6">{children}</div>
+      <FirstRunHints />
     </main>
   );
 }
@@ -53,7 +55,7 @@ export function TopBar({
   const BackIcon = backHref === '/' ? HomeIcon : ArrowLeft;
   return (
     <header className="flex items-center gap-2 py-3 sm:gap-3 sm:py-4">
-      <Link href={backHref} aria-label={backLabel} className="toy-button toy-white grid h-14 w-14 shrink-0 place-items-center rounded-full" data-testid="button-back">
+      <Link href={backHref} aria-label={backLabel} className="toy-button toy-white grid h-14 w-14 shrink-0 place-items-center rounded-full" data-testid="button-back" data-hint={backHref === '/' ? 'home' : 'back'}>
         <BackIcon size={26} strokeWidth={2.6} />
       </Link>
       <div className="flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-full bg-white/85 py-1.5 pl-4 pr-5 shadow-[0_4px_0_rgba(60,72,88,.08)] sm:pl-1.5">
@@ -69,7 +71,7 @@ export function TopBar({
         </div>
       )}
       {next && (
-        <Link href={next.href} className="toy-button toy-green flex h-14 shrink-0 items-center gap-1 rounded-full px-4 font-display text-lg font-semibold" data-testid="button-next-scene">
+        <Link href={next.href} className="toy-button toy-green flex h-14 shrink-0 items-center gap-1 rounded-full px-4 font-display text-lg font-semibold" data-testid="button-next-scene" data-hint="next">
           <span className="hidden sm:inline">{next.label}</span><ArrowRight size={24} strokeWidth={2.6} />
         </Link>
       )}
@@ -174,7 +176,7 @@ const micCopy: Record<MicStatus, { en: string; zh: string }> = {
   offline: { en: 'Can’t reach the listener', zh: '语音服务连不上，点图片玩' },
 };
 
-export function MicButton({ status, level, onToggle }: { status: MicStatus; level: number; onToggle: () => void }) {
+export function MicButton({ status, level, onToggle, hint }: { status: MicStatus; level: number; onToggle: () => void; hint?: { en: string; zh: string } }) {
   const listening = status === 'listening';
   const disabled = status === 'unsupported';
   const ring = listening ? 1 + Math.min(level, 1) * 0.3 : 1;
@@ -194,6 +196,9 @@ export function MicButton({ status, level, onToggle }: { status: MicStatus; leve
           aria-pressed={listening}
           aria-label={listening ? 'Stop listening' : 'Start listening'}
           data-testid="button-toggle-listening"
+          data-hint="mic"
+          data-hint-en={hint?.en}
+          data-hint-zh={hint?.zh}
           className={`toy-button relative grid h-[104px] w-[104px] place-items-center rounded-full ${listening ? 'toy-green' : disabled ? 'toy-grey' : 'toy-coral'}`}
         >
           <Mic size={46} strokeWidth={2.4} />
@@ -209,7 +214,7 @@ export function RoundTool({ kind, onClick, disabled }: { kind: 'undo' | 'clear';
   const Icon = kind === 'undo' ? Undo2 : Eraser;
   return (
     <div className="flex w-20 flex-col items-center">
-      <button type="button" onClick={onClick} disabled={disabled} aria-label={kind === 'undo' ? 'Undo' : 'Clear the canvas'} data-testid={`button-${kind}`} className="toy-button toy-white grid h-16 w-16 place-items-center rounded-full disabled:opacity-45">
+      <button type="button" onClick={onClick} disabled={disabled} aria-label={kind === 'undo' ? 'Undo' : 'Clear the canvas'} data-testid={`button-${kind}`} data-hint={kind} className="toy-button toy-white grid h-16 w-16 place-items-center rounded-full disabled:opacity-45">
         <Icon size={28} strokeWidth={2.5} />
       </button>
       <p className="mt-1 text-center font-display text-sm font-semibold leading-tight text-[#2d3a4a]">{kind === 'undo' ? 'Undo' : 'Clear'}</p>
@@ -256,6 +261,7 @@ export function WordTray({ words, played, onPick, title = 'Picture words', subti
             type="button"
             onClick={() => onPick(word)}
             data-testid={`button-word-${word}`}
+            data-hint="words"
             className={`word-tile toy-button ${wordTypeTone[type].tile} relative flex min-h-[96px] flex-col items-center justify-center rounded-[20px] px-1 pb-2 pt-3 sm:min-h-[104px] sm:rounded-[22px]`}
           >
             {played.has(word) && <span className="absolute right-1.5 top-1 text-base" aria-label="played">⭐</span>}

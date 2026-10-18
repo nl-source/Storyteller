@@ -77,19 +77,23 @@ export function speakWord(text: string, rate = 0.78) {
 type Options = {
   vocab: VocabEntry[];
   onUtterance: (heard: HeardUtterance) => void;
-  /** Stop on our own after this long without any speech (ms). */
+  /** Called while the child is still speaking, for triggers that should not wait for the end of the sentence. */
+  onInterim?: (alternatives: string[]) => void;
+  /** Stop on our own after this long without any speech (ms). Infinity keeps listening until the child taps the mic again. */
   idleTimeoutMs?: number;
 };
 
-export function useSpeechWords({ vocab, onUtterance, idleTimeoutMs = 45000 }: Options) {
+export function useSpeechWords({ vocab, onUtterance, onInterim, idleTimeoutMs = 45000 }: Options) {
   const [status, setStatus] = useState<MicStatus>(() => (getRecognizer() ? 'idle' : 'unsupported'));
   const [interim, setInterim] = useState('');
   const [level, setLevel] = useState(0);
 
   const vocabRef = useRef(vocab);
   const onUtteranceRef = useRef(onUtterance);
+  const onInterimRef = useRef(onInterim);
   vocabRef.current = vocab;
   onUtteranceRef.current = onUtterance;
+  onInterimRef.current = onInterim;
 
   const recognizerRef = useRef<SpeechRecognizer | null>(null);
   const wantListeningRef = useRef(false);
@@ -188,6 +192,7 @@ export function useSpeechWords({ vocab, onUtterance, idleTimeoutMs = 45000 }: Op
           pendingRef.current = alternatives;
           lastSpeechRef.current = Date.now();
           setInterim(alternatives[0] ?? '');
+          onInterimRef.current?.(alternatives);
         }
       }
     };
