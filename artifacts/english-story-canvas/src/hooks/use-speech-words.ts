@@ -98,6 +98,7 @@ export function useSpeechWords({ vocab, onUtterance, onInterim, idleTimeoutMs = 
   const recognizerRef = useRef<SpeechRecognizer | null>(null);
   const wantListeningRef = useRef(false);
   const pendingRef = useRef<string[] | null>(null);
+  const lastDeliveredRef = useRef<{ key: string; at: number } | null>(null);
   const lastSpeechRef = useRef(0);
   const restartTimesRef = useRef<number[]>([]);
   const meterRef = useRef<{ stream: MediaStream; context: AudioContext; frame: number } | null>(null);
@@ -148,6 +149,11 @@ export function useSpeechWords({ vocab, onUtterance, onInterim, idleTimeoutMs = 
     setInterim('');
     const cleaned = alternatives.map((text) => text.trim()).filter(Boolean);
     if (!cleaned.length) return;
+    const key = cleaned.join(' ').toLowerCase();
+    const now = Date.now();
+    const lastDelivered = lastDeliveredRef.current;
+    if (lastDelivered?.key === key && now - lastDelivered.at < 1800) return;
+    lastDeliveredRef.current = { key, at: now };
     lastSpeechRef.current = Date.now();
     const best = matchAlternatives(cleaned, vocabRef.current);
     onUtteranceRef.current({ ...best, alternatives: cleaned });
@@ -231,6 +237,7 @@ export function useSpeechWords({ vocab, onUtterance, onInterim, idleTimeoutMs = 
     if (!getRecognizer()) { setStatus('unsupported'); return; }
     if (wantListeningRef.current) return;
     wantListeningRef.current = true;
+    lastDeliveredRef.current = null;
     lastSpeechRef.current = Date.now();
     restartTimesRef.current = [];
     setStatus('listening');
