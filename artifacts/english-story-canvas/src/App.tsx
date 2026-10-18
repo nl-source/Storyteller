@@ -61,7 +61,7 @@ import {
   type WordType,
 } from '@/components/kid-ui';
 import { speakWord, useSpeechWords, type HeardUtterance } from '@/hooks/use-speech-words';
-import { buildVocab, toHeardTokens, type HeardToken, type VocabEntry } from '@/lib/speech-match';
+import { buildVocab, matchUtterance, toHeardTokens, type HeardToken, type VocabEntry } from '@/lib/speech-match';
 
 const queryClient = new QueryClient();
 
@@ -93,7 +93,7 @@ const typesOf = (words: PictureWord[]) => Object.fromEntries(words.map(({ word, 
 function sentenceForWords(words: Word[]) {
   if (!words.length) return 'Your silly story will grow here…';
   const sequence = words.join(' ');
-  if (sequence.includes('apple eat bee')) return 'The apple grew a giant mouth and chased the flying bee, but never caught it. CHOMP!';
+  if (sequence.includes('apple eat bee')) return 'The apple grew a giant mouth and — CHOMP! — bit the bee. Out popped the bee, a little dizzy.';
   if (sequence.includes('bee eat apple')) return 'The bee grew a giant mouth, chased the apple, and finally bit it on the ground. CHOMP!';
   if (sequence.includes('apple fly')) return 'The apple sprouted wings and flew like a very confused bird.';
   if (sequence.includes('bee fly')) return 'The bee zoomed away, leaving a tiny yellow blur.';
@@ -104,10 +104,13 @@ function sentenceForWords(words: Word[]) {
   return `${words.join(' ')}… what will happen next?`;
 }
 
-function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
+/** `chompId` goes up each time "apple eats bee" is heard, so the bite replays even if those words are already on the canvas. */
+function StoryCanvas({ activeWords, chompId = 0 }: { activeWords: Word[]; chompId?: number }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(activeWords);
+  const chompRef = useRef(chompId);
   activeRef.current = activeWords;
+  chompRef.current = chompId;
 
   useEffect(() => {
     if (!holderRef.current) return;
@@ -118,6 +121,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
       let appleRevealFrame = -1;
       let beeRevealFrame = -1;
       let actionStartFrame = -1;
+      let lastChompId = chompRef.current;
       let referenceArtwork: p5.Image;
       const getWords = () => activeRef.current;
       const has = (word: Word) => getWords().includes(word);
@@ -170,6 +174,10 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           }
           previousSequence = sequence;
         }
+        if (chompRef.current !== lastChompId) {
+          lastChompId = chompRef.current;
+          actionStartFrame = canvas.frameCount;
+        }
         const appleEatBee = hasInOrder(['apple', 'eat', 'bee']);
         const beeEatApple = hasInOrder(['bee', 'eat', 'apple']);
         const appleHasMouth = hasInOrder(['apple', 'eat']);
@@ -193,17 +201,29 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         const appleScale = has('apple') ? 0.16 + revealEase * 0.84 : 0;
         const beeRevealProgress = Math.min(1, beeFrames / 28);
         const beeScale = has('bee') ? 0.35 + (1 - Math.pow(1 - beeRevealProgress, 3)) * 0.65 : 0;
-        const appleEatBeeFall = appleEatBee ? Math.min(1, Math.max(0, (actionFrames - 42) / 34)) : 0;
-        const appleEatBeeShake = appleEatBee && appleEatBeeFall < 1
-          ? Math.sin(canvas.frameCount * 1.08) * 7 * (1 - appleEatBeeFall)
-          : 0;
+        // "apple eats bee": grow a mouth → lunge → CHOMP → chew → the bee pops out, dizzy but fine.
+        const easeOut = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+        const chompT = appleEatBee ? actionFrames : 0;
+        const mouthGrow = appleEatBee ? easeOut(chompT / 16) : 0;
+        const lunge = !appleEatBee ? 0
+          : chompT < 16 ? 0
+            : chompT < 30 ? easeOut((chompT - 16) / 14)
+              : chompT < 78 ? 1
+                : 1 - easeOut((chompT - 78) / 20);
+        const beeInMouth = appleEatBee && chompT >= 30 && chompT < 78;
+        const spitT = appleEatBee && chompT >= 78 ? chompT - 78 : -1;
+        const beePerchX = w * 0.36;
+        const beePerchY = h * 0.36;
+        const chewShake = beeInMouth ? Math.sin(canvas.frameCount * 0.9) * 3 : 0;
         const beeEatAppleChase = beeEatApple ? Math.min(1, actionFrames / 105) : 0;
         const beeEatAppleFall = beeEatApple ? Math.min(1, Math.max(0, (actionFrames - 105) / 35)) : 0;
         const beeAppleShake = beeEatApple && actionFrames >= 72 && actionFrames < 105
           ? Math.sin(canvas.frameCount * 1.05) * 7
           : 0;
         const beeX = appleEatBee
-          ? w * 0.26 + Math.sin(canvas.frameCount * 0.18) * 22
+          ? spitT < 0
+            ? beePerchX + Math.sin(canvas.frameCount * 0.5) * 4 // nervous hover before the bite
+            : beePerchX - 20 - Math.min(1, spitT / 22) * w * 0.1 + Math.sin(canvas.frameCount * 0.12) * 18
           : beeEatApple
             ? beeEatAppleFall > 0
               ? appleGroundX - 27
@@ -212,7 +232,9 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
               ? w * 0.42 + Math.sin(canvas.frameCount * 0.08) * 72
               : w * 0.39 + Math.sin(canvas.frameCount * 0.045) * 24;
         const beeY = appleEatBee
-          ? h * 0.3 + Math.cos(canvas.frameCount * 0.24) * 36
+          ? spitT < 0
+            ? beePerchY + Math.cos(canvas.frameCount * 0.6) * 3
+            : beePerchY - Math.sin(Math.min(1, spitT / 22) * Math.PI) * 50 - Math.min(1, spitT / 22) * h * 0.06 + Math.cos(canvas.frameCount * 0.16) * 10
           : beeEatApple
             ? beeEatAppleFall > 0
               ? h * 0.53 + (appleGroundY - h * 0.53) * beeEatAppleFall - 4
@@ -221,14 +243,14 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
               ? h * 0.27 + Math.cos(canvas.frameCount * 0.11) * 44
               : h * 0.34 + Math.cos(canvas.frameCount * 0.06) * 14;
         const appleX = appleEatBee
-          ? appleHomeX + appleEatBeeShake
+          ? appleHomeX + (beePerchX + 34 - appleHomeX) * lunge + chewShake
           : beeEatApple
             ? appleHomeX + Math.sin(canvas.frameCount * 0.14) * 18 + beeAppleShake
             : appleFlying
               ? w * 0.62 + Math.sin(canvas.frameCount * 0.06) * 42
               : appleHomeX;
         const appleY = appleEatBee
-          ? appleHomeY + (appleGroundY - appleHomeY) * appleEatBeeFall
+          ? appleHomeY + (beePerchY + 6 - appleHomeY) * lunge - Math.sin(lunge * Math.PI) * 30
           : beeEatApple
             ? appleHomeY + (appleGroundY - appleHomeY) * beeEatAppleFall
             : appleFlying
@@ -261,7 +283,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         if (has('apple')) {
           canvas.push();
           canvas.translate(appleX, appleY);
-          canvas.scale(appleScale);
+          canvas.scale(appleScale * (1 + mouthGrow * 0.3));
           if (appleFlying) {
             canvas.fill('#edf8f4'); canvas.ellipse(-22, -24, 30, 17); canvas.ellipse(22, -24, 30, 17);
             canvas.fill('#d4eee8'); canvas.ellipse(-22, -24, 16, 10); canvas.ellipse(22, -24, 16, 10);
@@ -292,14 +314,51 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
             canvas.ellipse(13, 3, 7, 5);
             canvas.fill('#243b53'); canvas.circle(-8, -5, 4); canvas.circle(9, -7, 4);
           }
+          if (appleEatBee) {
+            // The apple faces the bee (to its left), so the mouth sits on the left side.
+            const open = chompT < 30 ? mouthGrow * (0.6 + lunge * 0.4) : beeInMouth ? 0.18 + Math.abs(Math.sin(canvas.frameCount * 0.45)) * 0.12 : 0.22;
+            canvas.fill('#243b53'); canvas.circle(-6, -12, 5); canvas.circle(10, -14, 5);
+            if (beeInMouth) {
+              canvas.fill('#ff9a86'); canvas.ellipse(-28, 6, 18, 14); canvas.ellipse(16, 10, 16, 12); // puffed cheeks
+            }
+            canvas.fill('#382b38'); canvas.ellipse(-14, 10, 36 * Math.max(0.35, mouthGrow), 4 + 34 * open);
+            if (open > 0.3) {
+              canvas.fill('#fff9e9'); canvas.rect(-24, 10 - (4 + 34 * open) / 2, 7, 7, 2); canvas.rect(-12, 10 - (4 + 34 * open) / 2, 7, 7, 2);
+              canvas.fill('#f38e9b'); canvas.ellipse(-14, 10 + 10 * open, 16, 8 * open);
+            }
+          }
           if (beeEatApple && beeEatAppleFall > 0.82) {
             canvas.fill('#382b38');
             canvas.circle(-21, 5, 8);
           }
           canvas.pop();
         }
+        if (beeInMouth) {
+          const mouthX = appleX - 14 * appleScale * 1.3;
+          const mouthY = appleY + 10 * appleScale * 1.3;
+          const flap = Math.sin(canvas.frameCount * 0.9) * 4;
+          canvas.fill('#edf8f4'); canvas.stroke('#9fb7c7'); canvas.strokeWeight(1.5);
+          canvas.ellipse(mouthX - 10, mouthY - 16 - flap, 20, 12); canvas.ellipse(mouthX + 8, mouthY - 16 + flap, 20, 12);
+          canvas.noStroke();
+          if (chompT < 54) {
+            const pop = easeOut((chompT - 30) / 8);
+            canvas.push();
+            canvas.translate(mouthX - 64, mouthY - 62);
+            canvas.scale(0.6 + pop * 0.5);
+            canvas.fill('#ffd248');
+            canvas.beginShape();
+            for (let i = 0; i < 16; i += 1) {
+              const r = i % 2 ? 26 : 44;
+              canvas.vertex(Math.cos((i / 16) * Math.PI * 2) * r * 1.4, Math.sin((i / 16) * Math.PI * 2) * r);
+            }
+            canvas.endShape(canvas.CLOSE);
+            canvas.fill('#c2410c'); canvas.textAlign(canvas.CENTER, canvas.CENTER); canvas.textStyle(canvas.BOLD); canvas.textSize(20);
+            canvas.text('CHOMP!', 0, 1);
+            canvas.pop();
+          }
+        }
         // bee with looping flight path
-        if (has('bee')) {
+        if (has('bee') && !beeInMouth) {
           const bx = beeX;
           const by = beeY;
           canvas.noFill(); canvas.stroke('#f2af2d'); canvas.strokeWeight(2); canvas.drawingContext.setLineDash([5, 6]);
@@ -312,6 +371,20 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
           const flap = Math.sin(canvas.frameCount * (beeFlying ? 0.5 : 0.3)) * 5;
           canvas.fill('#edf8f4'); canvas.ellipse(bx - 13, by - 20 - flap, 22, 14); canvas.ellipse(bx + 14, by - 20 + flap, 22, 14);
           canvas.fill('#243b53'); canvas.circle(bx + 22, by - 2, 4); canvas.circle(bx + 10, by - 5, 4);
+          if (spitT >= 0 && spitT < 150) {
+            // Dizzy stars circle the bee after it pops out.
+            canvas.fill('#ffcf3f');
+            for (let i = 0; i < 3; i += 1) {
+              const a = canvas.frameCount * 0.15 + (i * Math.PI * 2) / 3;
+              const sx = bx + 4 + Math.cos(a) * 22;
+              const sy = by - 26 + Math.sin(a) * 7;
+              canvas.push(); canvas.translate(sx, sy); canvas.rotate(a);
+              canvas.beginShape();
+              for (let k = 0; k < 10; k += 1) canvas.vertex(Math.cos((k / 10) * Math.PI * 2) * (k % 2 ? 2.5 : 6), Math.sin((k / 10) * Math.PI * 2) * (k % 2 ? 2.5 : 6));
+              canvas.endShape(canvas.CLOSE);
+              canvas.pop();
+            }
+          }
           if (beeEatApple) {
             // An oversized, friendly mouth makes the bite readable at a glance.
             const mouthOpen = 20 + Math.abs(Math.sin(canvas.frameCount * 0.24)) * 9;
@@ -333,7 +406,7 @@ function StoryCanvas({ activeWords }: { activeWords: Word[] }) {
         }
         if (appleEatBee) {
           canvas.fill('#243b53'); canvas.textAlign(canvas.CENTER, canvas.CENTER); canvas.textSize(13); canvas.textStyle(canvas.BOLD);
-          canvas.text('apple says: “whoops!”', w * 0.5, h * 0.91);
+          canvas.text(beeInMouth ? 'apple says: “CHOMP! chomp, chomp…”' : spitT >= 0 ? 'bee says: “Bzz… I’m OK, just dizzy!”' : 'apple says: “Yum?”', w * 0.5, h * 0.91);
         } else if (beeEatApple) {
           canvas.fill('#243b53'); canvas.textAlign(canvas.CENTER, canvas.CENTER); canvas.textSize(13); canvas.textStyle(canvas.BOLD);
           canvas.text('bee says: “one giant bite!”', w * 0.5, h * 0.91);
@@ -379,7 +452,7 @@ function Landing() {
       </section>
       <section className="mx-auto mt-8 grid w-full max-w-5xl flex-1 content-start gap-5 sm:grid-cols-3" aria-label="Chapters">
         {chapters.map(({ href, number, title, zh, line, scene, sky }) => (
-          <Link key={href} href={href} className="toy-button toy-white group flex flex-col overflow-hidden rounded-[30px] text-left" data-testid={`link-chapter-${number}`}>
+          <Link key={href} href={href} className="toy-button toy-white group flex flex-col overflow-hidden rounded-[30px] text-left" data-testid={`link-chapter-${number}`} data-hint="chapter">
             <div className={`relative flex h-40 items-end justify-center gap-1 bg-gradient-to-b ${sky} pb-4 sm:h-44`}>
               <span className="absolute left-3 top-3 grid h-10 w-10 place-items-center rounded-full bg-white font-display text-xl font-semibold text-[#e0533d]">{number}</span>
               <span className="text-6xl transition-transform group-hover:-translate-y-1" aria-hidden="true">{scene[0]}</span>
@@ -552,6 +625,7 @@ function SessionThree() {
             onClick={() => activateScene(kind)}
             aria-label={prompt}
             data-testid={`button-session-3-${kind}`}
+            data-hint="window"
             className="toy-button toy-white flex flex-col rounded-[30px] p-2.5 text-left"
           >
             <div className="min-h-[190px] w-full overflow-hidden rounded-[24px]"><SceneCanvas kind={kind} action={actions[kind]} /></div>
@@ -2016,15 +2090,58 @@ const storyWords: PictureWord[] = [
 const storyVocab = buildVocab(storyWords.map(({ word }) => word));
 const storyTypes = typesOf(storyWords);
 
+const CHOMP_PHRASE: Word[] = ['apple', 'eat', 'bee'];
+
+/** True when the words contain apple → eat → bee in that order ("apple eats bee", "the apple eats the bee"). */
+function hasChompPhrase(words: string[]) {
+  let cursor = 0;
+  for (const word of words) if (word === CHOMP_PHRASE[cursor]) cursor += 1;
+  return cursor >= CHOMP_PHRASE.length;
+}
+
+/** Remove the first apple → eat → bee run, so words already added while the child was still talking are not added twice. */
+function withoutChompPhrase(words: Word[]) {
+  const rest = [...words];
+  let from = 0;
+  for (const target of CHOMP_PHRASE) {
+    const at = rest.indexOf(target, from);
+    if (at < 0) return words;
+    rest.splice(at, 1);
+    from = at;
+  }
+  return rest;
+}
+
 function Home() {
   const [words, setWords] = useState<Word[]>([]);
   const [heard, setHeard] = useState<HeardState>(emptyHeard);
+  const [chompId, setChompId] = useState(0);
+  // Set when "apple eats bee" was caught mid-sentence, so the final result does not trigger it again.
+  const chompedEarlyRef = useRef(false);
 
   const mic = useSpeechWords({
     vocab: storyVocab,
+    // Keep listening until the child taps the mic off; Chrome's own pauses are bridged by the hook.
+    idleTimeoutMs: Number.POSITIVE_INFINITY,
+    onInterim: (alternatives) => {
+      if (chompedEarlyRef.current) return;
+      if (!alternatives.some((text) => hasChompPhrase(matchUtterance(text, storyVocab).words))) return;
+      chompedEarlyRef.current = true;
+      setChompId((id) => id + 1);
+      setWords((current) => [...current, ...CHOMP_PHRASE]);
+      setHeard({ ...emptyHeard, tokens: toHeardTokens('apple eat bee', storyVocab) });
+    },
     onUtterance: (utterance) => {
+      const caughtEarly = chompedEarlyRef.current;
+      chompedEarlyRef.current = false;
       setHeard(heardFrom(utterance, storyVocab));
-      if (utterance.words.length) setWords((current) => [...current, ...(utterance.words as Word[])]);
+      const spoken = utterance.words as Word[];
+      if (caughtEarly && hasChompPhrase(spoken)) {
+        setWords((current) => [...current, ...withoutChompPhrase(spoken)]);
+        return;
+      }
+      if (hasChompPhrase(spoken)) setChompId((id) => id + 1);
+      if (spoken.length) setWords((current) => [...current, ...spoken]);
     },
   });
 
@@ -2053,10 +2170,10 @@ function Home() {
             caption={<StoryCaption>{words.length ? sentenceForWords(words) : 'Say apple, bee, eat or fly to start the story! ✨'}</StoryCaption>}
             aspect={0.63}
           >
-            <StoryCanvas activeWords={words} />
+            <StoryCanvas activeWords={words} chompId={chompId} />
           </CanvasFrame>
         )}
-        dock={<ControlDock mic={<MicButton status={mic.status} level={mic.level} onToggle={mic.toggle} />} onUndo={undo} onClear={clear} undoDisabled={!words.length} />}
+        dock={<ControlDock mic={<MicButton status={mic.status} level={mic.level} onToggle={mic.toggle} hint={{ en: 'Tap, then say “apple eats bee”!', zh: '点我，说 apple eats bee 试试' }} />} onUndo={undo} onClear={clear} undoDisabled={!words.length} />}
         words={<WordTray words={storyWords} played={played} onPick={pickWord} />}
       />
     </KidPage>
