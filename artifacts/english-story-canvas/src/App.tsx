@@ -72,17 +72,17 @@ const vocabulary: Array<{ word: Word; hint: string; color: string }> = [
 
 const wordAliases: Record<Word, string[]> = {
   apple: ['apple', 'apples'],
-  bee: ['bee', 'bees', 'be', 'b'],
+  bee: ['bee', 'bees', 'be', 'b', 'bea', 'beee'],
   eat: ['eat', 'eats', 'eating', 'ate'],
   fly: ['fly', 'flies', 'flying'],
 };
 
 function findWords(transcript: string): Word[] {
   const tokens = transcript.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
-  return tokens.flatMap((token) => {
+  return Array.from(new Set(tokens.flatMap((token) => {
     const match = vocabulary.find(({ word }) => wordAliases[word].includes(token));
     return match ? [match.word] : [];
-  });
+  })));
 }
 
 function sentenceForWords(words: Word[]) {
@@ -1592,6 +1592,7 @@ function Home() {
   const [status, setStatus] = useState('Say one word, or build a silly phrase.');
   const [unsupported, setUnsupported] = useState(false);
   const recognitionRef = useRef<SpeechLike | null>(null);
+  const processedFinalTranscriptRef = useRef('');
   const supported = useMemo(() => typeof window !== 'undefined' && Boolean((window as Window & { SpeechRecognition?: SpeechConstructor; webkitSpeechRecognition?: SpeechConstructor }).SpeechRecognition || (window as Window & { webkitSpeechRecognition?: SpeechConstructor }).webkitSpeechRecognition), []);
 
   useEffect(() => {
@@ -1614,10 +1615,20 @@ function Home() {
       setStatus(event.error === 'not-allowed' ? 'Microphone access is off. You can still tap an example word.' : 'I missed that. Let’s try one more time.');
     };
     recognition.onresult = (event) => {
-      const transcript = Array.from({ length: event.results.length }, (_, index) => event.results[index][0].transcript).join(' ');
-      setHeard(transcript);
       const lastResult = event.results[event.results.length - 1];
+      const interimTranscript = lastResult?.[0]?.transcript ?? '';
+      if (interimTranscript) setHeard(interimTranscript);
       if (!lastResult?.isFinal) return;
+
+      // Chrome may emit the same final result more than once after interim
+      // results. Only use the final utterance once so one "bee" creates one bee.
+      const transcript = Array.from(
+        { length: event.results.length },
+        (_, index) => event.results[index]?.[0]?.transcript ?? '',
+      ).join(' ').trim();
+      if (!transcript || transcript === processedFinalTranscriptRef.current) return;
+      processedFinalTranscriptRef.current = transcript;
+
       const spokenWords = findWords(transcript);
       if (spokenWords.length) addWords(spokenWords, transcript);
       else setStatus('I heard you, but try one of the four silly story words.');
@@ -1642,6 +1653,7 @@ function Home() {
     if (isListening) recognitionRef.current.stop();
     else {
       setHeard('');
+      processedFinalTranscriptRef.current = '';
       setStatus('Listening… say one word or a silly phrase.');
       try { recognitionRef.current.start(); } catch { setStatus('The microphone is busy. Please tap again.'); }
     }
@@ -1650,6 +1662,7 @@ function Home() {
   const resetStory = () => {
     setWords([]);
     setHeard('');
+    processedFinalTranscriptRef.current = '';
     setStatus('A fresh page! Try making a silly word recipe.');
   };
 
