@@ -224,9 +224,10 @@ export function RoundTool({ kind, onClick, disabled }: { kind: 'undo' | 'clear';
 }
 
 /** Big round mic in the middle, Undo on the left, Clear on the right. Sticks to the bottom on phones and tablets. */
-export function ControlDock({ mic, onUndo, onClear, undoDisabled }: { mic: ReactNode; onUndo: () => void; onClear: () => void; undoDisabled?: boolean }) {
+export function ControlDock({ mic, heard, onUndo, onClear, undoDisabled }: { mic: ReactNode; heard?: ReactNode; onUndo: () => void; onClear: () => void; undoDisabled?: boolean }) {
   return (
     <div className="control-dock fixed inset-x-0 bottom-0 z-20 lg:static">
+      {heard && <div className="mx-auto max-w-md px-4 pb-2 lg:max-w-none">{heard}</div>}
       <div className="mx-auto flex max-w-md items-end justify-center gap-6 px-4 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 sm:gap-10">
         <RoundTool kind="undo" onClick={onUndo} disabled={undoDisabled} />
         {mic}

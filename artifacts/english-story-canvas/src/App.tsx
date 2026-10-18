@@ -2165,19 +2165,14 @@ function Home() {
       <TopBar emoji="📖" title="Story Canvas" subtitle="说一个词，故事就会动起来" stars={{ value: played.size, total: storyWords.length }} />
       <PlayLayout
         canvas={(
-          <>
-            <div className="min-h-12 px-1">
-              <HeardBubble listening={mic.listening} interim={mic.interim} types={storyTypes} {...heard} />
-            </div>
-            <CanvasFrame
-              caption={<StoryCaption>{words.length ? sentenceForWords(words) : 'Say apple, bee, eat or fly to start the story! ✨'}</StoryCaption>}
-              aspect={0.63}
-            >
-              <StoryCanvas activeWords={words} chompId={chompId} />
-            </CanvasFrame>
-          </>
+          <CanvasFrame
+            caption={<StoryCaption>{words.length ? sentenceForWords(words) : 'Say apple, bee, eat or fly to start the story! ✨'}</StoryCaption>}
+            aspect={0.63}
+          >
+            <StoryCanvas activeWords={words} chompId={chompId} />
+          </CanvasFrame>
         )}
-        dock={<ControlDock mic={<MicButton status={mic.status} level={mic.level} onToggle={mic.toggle} hint={{ en: 'Tap, then say “apple eats bee”!', zh: '点我，说 apple eats bee 试试' }} />} onUndo={undo} onClear={clear} undoDisabled={!words.length} />}
+        dock={<ControlDock heard={<HeardBubble listening={mic.listening} interim={mic.interim} types={storyTypes} {...heard} />} mic={<MicButton status={mic.status} level={mic.level} onToggle={mic.toggle} hint={{ en: 'Tap, then say “apple eats bee”!', zh: '点我，说 apple eats bee 试试' }} />} onUndo={undo} onClear={clear} undoDisabled={!words.length} />}
         words={<WordTray words={storyWords} played={played} onPick={pickWord} />}
       />
     </KidPage>

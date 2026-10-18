@@ -70,6 +70,7 @@ export function normalizeTokens(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/['’]/g, '')
+    .replace(/\bb\s+e\b/g, 'be')
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
@@ -235,7 +236,7 @@ export function buildVocab(words: string[]): VocabEntry[] {
  */
 export const COMMON_VARIANTS: Record<string, Omit<VocabEntry, 'word'>> = {
   apple: { forms: ['apples'], aliases: ['appel', 'appo', 'apo', 'appl', 'apel'], weakAliases: ['able', 'happen', 'opal'] },
-  bee: { forms: ['bees'], aliases: ['be', 'b', 'bea', 'bee', 'bi', 'bie'], weakAliases: ['pee', 'p', 'beat'] },
+  bee: { forms: ['bees'], aliases: ['be', 'b', 'bea', 'bee', 'bi', 'bie', 'beee', 'bey', 'bibi', 'beebee'], weakAliases: ['pee', 'p', 'beat'] },
   eat: { forms: ['eats', 'eating', 'ate', 'eaten'], aliases: ['eet', 'eatt'], weakAliases: ['it', 'each', 'eight', 'heat', 'yeet'] },
   fly: { forms: ['flies', 'flying', 'flew'], keepForms: ['flies'], aliases: ['fli', 'flight', 'fry', 'flai'], weakAliases: ['fries', 'fried', 'fla', 'fine'] },
   wind: { forms: ['winds', 'windy'], aliases: ['wend', 'whind', 'vind', 'wint'], weakAliases: ['when', 'went', 'win', 'wins', 'wine'] },
