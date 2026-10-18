@@ -18,6 +18,9 @@ test('exact words and inflections', () => {
 test('typical mishearings of children are accepted', () => {
   assert.deepEqual(words('B.'), ['bee']);
   assert.deepEqual(words('be'), ['bee']);
+  assert.deepEqual(words('b e'), ['bee']);
+  assert.deepEqual(words('beee'), ['bee']);
+  assert.deepEqual(words('bibi'), ['bee']);
   assert.deepEqual(words('fry'), ['fly']);
   assert.deepEqual(words('appo'), ['apple']);
   assert.deepEqual(words('apples fly'), ['apple', 'fly']);
